@@ -1,0 +1,11 @@
+{
+  "rust-analyzer.diagnostics.disabled": ["unexpected_cfgs"],
+  "rust-analyzer.cargo.features": [
+    "cpi",
+    "no-entrypoint",
+    "no-idl",
+    "no-log-ix-name",
+    "idl-build"
+  ],
+  "rust-analyzer.cargo.target": "bpfel-unknown-unknown"
+}
