@@ -12,4 +12,12 @@ pub mod social {
     pub fn create_profile(ctx: Context<CreateProfile>, username: String) -> Result<()> {
         instructions::create_profile(ctx, username)
     }
+
+    pub fn create_tweet(ctx: Context<CreateTweet>, content: String) -> Result<()> {
+        instructions::create_tweet(ctx, content)
+    }
+
+    pub fn create_like(ctx: Context<CreateLike>) -> Result<()> {
+        instructions::create_like(ctx)
+    }
 }

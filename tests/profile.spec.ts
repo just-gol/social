@@ -1,30 +1,7 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program, AnchorProvider, web3 } from "@coral-xyz/anchor";
-import { Social } from "../target/types/social";
 import { expect } from "chai";
+import { program, Keypair, airdrop, profilePda } from "./helpers";
 
-describe("social", () => {
-  const provider = AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.social as Program<Social>;
-  const { SystemProgram, Keypair, PublicKey } = web3;
-
-  async function airdrop(pubkey: anchor.web3.PublicKey, sol = 1) {
-    const sig = await provider.connection.requestAirdrop(
-      pubkey,
-      sol * web3.LAMPORTS_PER_SOL
-    );
-    await provider.connection.confirmTransaction(sig, "confirmed");
-  }
-
-  function profilePda(authority: anchor.web3.PublicKey) {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("profile"), authority.toBuffer()],
-      program.programId
-    )[0];
-  }
-
+describe("profile", () => {
   it("creates profile and stores name", async () => {
     const authority = Keypair.generate();
     await airdrop(authority.publicKey);
