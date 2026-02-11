@@ -3,6 +3,7 @@ import { AnchorProvider } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import type { Social } from "../target/types/social";
 
 function expandHome(path: string) {
   if (path.startsWith("~")) {
@@ -38,4 +39,4 @@ const idl = JSON.parse(
   readFileSync(resolve(__dirname, "../target/idl/social.json"), "utf8")
 );
 export const programId = new PublicKey(idl.address);
-export const program = new anchor.Program(idl, provider);
+export const program = new anchor.Program<Social>(idl, provider);

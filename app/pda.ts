@@ -13,6 +13,33 @@ export function nftMintPda() {
   )[0];
 }
 
+export function profilePda(authority: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("profile"), authority.toBuffer()],
+    program.programId
+  )[0];
+}
+
+function u32ToLeBytes(value: number) {
+  const buf = Buffer.alloc(4);
+  buf.writeUInt32LE(value, 0);
+  return buf;
+}
+
+export function tweetPda(profile: PublicKey, tweetCount: number) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("tweet"), profile.toBuffer(), u32ToLeBytes(tweetCount)],
+    program.programId
+  )[0];
+}
+
+export function likePda(tweet: PublicKey, profile: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("like"), tweet.toBuffer(), profile.toBuffer()],
+    program.programId
+  )[0];
+}
+
 export function associatedTokenAddress(mint: PublicKey, owner: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
