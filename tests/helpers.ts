@@ -7,6 +7,16 @@ anchor.setProvider(provider);
 
 export const program = anchor.workspace.social as Program<Social>;
 export const { SystemProgram, Keypair, PublicKey } = web3;
+export const TOKEN_PROGRAM_ID = new PublicKey(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+);
+export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+);
+export const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+);
+export const SYSVAR_RENT_PUBKEY = web3.SYSVAR_RENT_PUBKEY;
 
 export async function airdrop(pubkey: web3.PublicKey, sol = 1) {
   const sig = await provider.connection.requestAirdrop(
@@ -40,5 +50,34 @@ export function likePda(tweet: web3.PublicKey, profile: web3.PublicKey) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("like"), tweet.toBuffer(), profile.toBuffer()],
     program.programId
+  )[0];
+}
+
+export function nftMintPda() {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("mint")],
+    program.programId
+  )[0];
+}
+
+export function metadataPda(mint: web3.PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      mint.toBuffer(),
+    ],
+    TOKEN_METADATA_PROGRAM_ID
+  )[0];
+}
+
+export function associatedTokenAddress(
+  mint: web3.PublicKey,
+  owner: web3.PublicKey,
+  tokenProgramId: web3.PublicKey = TOKEN_PROGRAM_ID
+) {
+  return PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
 }
