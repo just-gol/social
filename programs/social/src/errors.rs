@@ -6,4 +6,10 @@ pub enum SocialError {
     TweetCountOverflow,
     #[msg("Likes count overflow")]
     LikesOverflow,
+    #[msg("Reward already claimed")]
+    RewardAlreadyClaimed,
+    #[msg("Invalid profile pda")]
+    InvalidProfilePda,
+    #[msg("Invalid tweet pda")]
+    InvalidTweetPda,
 }

@@ -5,6 +5,7 @@ use anchor_lang::prelude::*;
 pub struct Like {
     pub profile_pda: Pubkey,
     pub tweet_pda: Pubkey,
+    pub reward_claimed: bool,
 }
 
 impl Like {
@@ -13,6 +14,12 @@ impl Like {
         Self {
             profile_pda,
             tweet_pda,
+            reward_claimed: false,
         }
+    }
+
+    pub fn claim_reward(&mut self) -> Result<()> {
+        self.reward_claimed = true;
+        Ok(())
     }
 }
