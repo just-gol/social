@@ -74,9 +74,25 @@ async function main() {
   }
 
   const like = likePda(tweet, profile);
+  const likeInfo = await program.provider.connection.getAccountInfo(like);
+  if (!likeInfo) {
+    const tx = await program.methods
+      .createLike()
+      .accountsStrict({
+        authority: wallet.publicKey,
+        tweet,
+        profile,
+        like,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([wallet])
+      .rpc();
+    console.log("create_like_tx", tx);
+  }
+
   const authorTokenAccount = associatedTokenAddress(mint, wallet.publicKey);
-  const tx = await program.methods
-    .createLike()
+  const rewardTx = await program.methods
+    .mintLikeReward()
     .accountsStrict({
       authority: wallet.publicKey,
       tweet,
@@ -84,15 +100,18 @@ async function main() {
       like,
       nftMintAccount: mint,
       authorTokenAccount,
-      authorWallet: wallet.publicKey,
+      author: wallet.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
-      tokenProgram: TOKEN_PROGRAM_ID,
     })
     .signers([wallet])
     .rpc();
 
-  console.log("create_like_tx", tx);
+  console.log("mint_like_reward_tx", rewardTx);
+
+  const tweetAccount = await program.account.tweet.fetch(tweet);
+  console.log("tweet_account", tweetAccount);
 }
 
 main().catch((err) => {
