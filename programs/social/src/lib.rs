@@ -20,8 +20,8 @@ pub mod social {
         instructions::create_like(ctx)
     }
 
-    pub fn create_nft_mint(ctx: Context<CreateNftMint>) -> Result<()> {
-        instructions::create_nft_mint(ctx)
+    pub fn create_nft_mint(ctx: Context<CreateNftMint>, code: u8) -> Result<()> {
+        instructions::create_nft_mint(ctx, code)
     }
 
     pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {

@@ -1,4 +1,4 @@
-use crate::state::nft_mint::NftMint;
+use crate::state::mint::NftMint;
 use crate::state::profile::Profile;
 use crate::state::tweet::Tweet;
 use crate::{errors::SocialError, state::like::Like};
