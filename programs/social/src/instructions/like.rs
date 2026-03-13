@@ -1,4 +1,4 @@
-use crate::state::mint::NftMint;
+use crate::state::mint::{NftMint, TokenMint};
 use crate::state::profile::Profile;
 use crate::state::tweet::Tweet;
 use crate::{errors::SocialError, state::like::Like};
@@ -73,15 +73,15 @@ pub struct MintLikeReward<'info> {
 
     #[account(
         mut,
-        seeds = [NftMint::NFT_MINT_PREFIX],
+        seeds = [TokenMint::TOKEN_MINT_PREFIX],
         bump,
     )]
-    pub nft_mint_account: InterfaceAccount<'info, Mint>,
+    pub token_mint_account: InterfaceAccount<'info, Mint>,
 
     #[account(
         init_if_needed,
         payer = authority,
-        associated_token::mint = nft_mint_account,
+        associated_token::mint = token_mint_account,
         associated_token::authority = author,
         associated_token::token_program = token_program,
     )]
@@ -114,11 +114,11 @@ pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             MintTo {
-                mint: ctx.accounts.nft_mint_account.to_account_info(),
+                mint: ctx.accounts.token_mint_account.to_account_info(),
                 to: ctx.accounts.author_token_account.to_account_info(),
-                authority: ctx.accounts.nft_mint_account.to_account_info(),
+                authority: ctx.accounts.token_mint_account.to_account_info(),
             },
-            &[&[b"mint", &[ctx.bumps.nft_mint_account]]],
+            &[&[b"mint", &[ctx.bumps.token_mint_account]]],
         ),
         1,
     )?;

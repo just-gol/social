@@ -25,6 +25,6 @@ pub struct CreateProfile<'info> {
 }
 
 pub fn create_profile(ctx: Context<CreateProfile>, name: String) -> Result<()> {
-    ctx.accounts.profile.name = name;
+    ctx.accounts.profile.set_inner(Profile::new(name));
     Ok(())
 }

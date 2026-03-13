@@ -6,13 +6,6 @@ import {
   TOKEN_PROGRAM_ID,
 } from "./ids";
 
-export function nftMintPda() {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("mint")],
-    program.programId
-  )[0];
-}
-
 export function profilePda(authority: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("profile"), authority.toBuffer()],
@@ -40,6 +33,27 @@ export function likePda(tweet: PublicKey, profile: PublicKey) {
   )[0];
 }
 
+export function rewardConfigPda(authority: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("reward_config"), authority.toBuffer()],
+    program.programId
+  )[0];
+}
+
+export function nftMintPda(rewardConfig: PublicKey, profile: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("nft_mint"), rewardConfig.toBuffer(), profile.toBuffer()],
+    program.programId
+  )[0];
+}
+
+export function tokenMintPda() {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("token_mint")],
+    program.programId
+  )[0];
+}
+
 export function associatedTokenAddress(mint: PublicKey, owner: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
@@ -53,6 +67,18 @@ export function metadataPda(mint: PublicKey) {
       Buffer.from("metadata"),
       TOKEN_METADATA_PROGRAM_ID.toBuffer(),
       mint.toBuffer(),
+    ],
+    TOKEN_METADATA_PROGRAM_ID
+  )[0];
+}
+
+export function masterEditionPda(mint: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      mint.toBuffer(),
+      Buffer.from("edition"),
     ],
     TOKEN_METADATA_PROGRAM_ID
   )[0];

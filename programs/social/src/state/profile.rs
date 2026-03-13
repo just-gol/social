@@ -7,6 +7,7 @@ pub struct Profile {
     #[max_len(32)]
     pub name: String,
     pub tweet_count: u32,
+    pub reward: bool,
 }
 
 impl Profile {
@@ -17,6 +18,17 @@ impl Profile {
             .tweet_count
             .checked_add(1)
             .ok_or(SocialError::TweetCountOverflow)?;
+        if self.tweet_count == 10 {
+            self.reward = true;
+        }
         Ok(())
+    }
+
+    pub fn new(name: String) -> Self {
+        Profile {
+            name,
+            tweet_count: 0,
+            reward: false,
+        }
     }
 }

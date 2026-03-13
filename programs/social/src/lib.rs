@@ -16,12 +16,24 @@ pub mod social {
     pub fn create_tweet(ctx: Context<CreateTweet>, content: String) -> Result<()> {
         instructions::create_tweet(ctx, content)
     }
+    pub fn init_reward_config(
+        ctx: Context<InitRewardConfig>,
+        name: String,
+        symbol: String,
+        uri: String,
+    ) -> Result<()> {
+        instructions::init_reward_config(ctx, name, symbol, uri)
+    }
     pub fn create_like(ctx: Context<CreateLike>) -> Result<()> {
         instructions::create_like(ctx)
     }
 
-    pub fn create_nft_mint(ctx: Context<CreateNftMint>, code: u8) -> Result<()> {
-        instructions::create_nft_mint(ctx, code)
+    pub fn create_nft_mint(ctx: Context<CreateNftMint>) -> Result<()> {
+        instructions::create_nft_mint(ctx)
+    }
+
+    pub fn create_token_mint(ctx: Context<CreateTokenMint>) -> Result<()> {
+        instructions::create_token_mint(ctx)
     }
 
     pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {

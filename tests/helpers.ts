@@ -53,9 +53,26 @@ export function likePda(tweet: web3.PublicKey, profile: web3.PublicKey) {
   )[0];
 }
 
-export function nftMintPda() {
+export function rewardConfigPda(authority: web3.PublicKey) {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("mint")],
+    [Buffer.from("reward_config"), authority.toBuffer()],
+    program.programId
+  )[0];
+}
+
+export function nftMintPda(
+  rewardConfig: web3.PublicKey,
+  profile: web3.PublicKey
+) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("nft_mint"), rewardConfig.toBuffer(), profile.toBuffer()],
+    program.programId
+  )[0];
+}
+
+export function tokenMintPda() {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("token_mint")],
     program.programId
   )[0];
 }
@@ -66,6 +83,18 @@ export function metadataPda(mint: web3.PublicKey) {
       Buffer.from("metadata"),
       TOKEN_METADATA_PROGRAM_ID.toBuffer(),
       mint.toBuffer(),
+    ],
+    TOKEN_METADATA_PROGRAM_ID
+  )[0];
+}
+
+export function masterEditionPda(mint: web3.PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("metadata"),
+      TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      mint.toBuffer(),
+      Buffer.from("edition"),
     ],
     TOKEN_METADATA_PROGRAM_ID
   )[0];

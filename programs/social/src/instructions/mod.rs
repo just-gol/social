@@ -1,5 +1,7 @@
 pub mod profile;
 pub use profile::*;
+pub mod reward_config;
+pub use reward_config::*;
 pub mod like;
 pub mod tweet;
 pub use like::*;

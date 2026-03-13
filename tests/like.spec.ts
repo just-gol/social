@@ -7,8 +7,11 @@ import {
   profilePda,
   tweetPda,
   likePda,
+  rewardConfigPda,
   nftMintPda,
+  tokenMintPda,
   metadataPda,
+  masterEditionPda,
   associatedTokenAddress,
   TOKEN_METADATA_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -16,10 +19,10 @@ import {
   SYSVAR_RENT_PUBKEY,
 } from "./helpers";
 
-async function createProfile(authority: any) {
+async function createProfile(authority: any, name = "user") {
   const profile = profilePda(authority.publicKey);
   await program.methods
-    .createProfile("user")
+    .createProfile(name)
     .accounts({
       authority: authority.publicKey,
     })
@@ -28,56 +31,125 @@ async function createProfile(authority: any) {
   return profile;
 }
 
-async function ensureNftMint(payer: any) {
-  const metadataProgramInfo = await program.provider.connection.getAccountInfo(
-    TOKEN_METADATA_PROGRAM_ID
-  );
-  if (!metadataProgramInfo || !metadataProgramInfo.executable) {
-    return null;
-  }
+async function initRewardConfig(authority: any) {
+  const rewardConfig = rewardConfigPda(authority.publicKey);
+  await program.methods
+    .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
+    .accountsStrict({
+      authority: authority.publicKey,
+      rewardConfig,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([authority])
+    .rpc();
+  return rewardConfig;
+}
 
-  const mint = nftMintPda();
-  const ata = associatedTokenAddress(mint, payer.publicKey, TOKEN_PROGRAM_ID);
+async function createNftMintFor(authority: any, profile: any, rewardConfig: any) {
+  const mint = nftMintPda(rewardConfig, profile);
+  const ata = associatedTokenAddress(mint, authority.publicKey, TOKEN_PROGRAM_ID);
   const metadata = metadataPda(mint);
+  const masterEdition = masterEditionPda(mint);
 
   await program.methods
     .createNftMint()
     .accountsStrict({
-      authority: payer.publicKey,
+      authority: authority.publicKey,
+      profile,
+      rewardConfig,
       nftMintAccount: mint,
       nftAssociatedTokenAccount: ata,
       metadataAccount: metadata,
+      masterEditonAccount: masterEdition,
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       tokenProgram: TOKEN_PROGRAM_ID,
       rent: SYSVAR_RENT_PUBKEY,
     })
-    .signers([payer])
+    .signers([authority])
     .rpc();
 
-  return mint;
+  return { mint, ata };
+}
+
+async function createTokenMint(authority: any) {
+  const tokenMint = tokenMintPda();
+  const metadata = metadataPda(tokenMint);
+
+  await program.methods
+    .createTokenMint()
+    .accountsStrict({
+      authority: authority.publicKey,
+      tokenMintAccount: tokenMint,
+      metadataAccount: metadata,
+      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+    })
+    .signers([authority])
+    .rpc();
+
+  return tokenMint;
+}
+
+async function createTweetFor(
+  authority: any,
+  profile: any,
+  rewardConfig: any,
+  mint: any,
+  content: string
+) {
+  const profileAccount = await program.account.profile.fetch(profile);
+  const tweet = tweetPda(profile, profileAccount.tweetCount);
+  const authorNftAccount = associatedTokenAddress(
+    mint,
+    authority.publicKey,
+    TOKEN_PROGRAM_ID
+  );
+
+  await program.methods
+    .createTweet(content)
+    .accountsStrict({
+      authority: authority.publicKey,
+      tweet,
+      profile,
+      nftMintAccount: mint,
+      rewardConfig,
+      authorNftAccount,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([authority])
+    .rpc();
+
+  return tweet;
 }
 
 describe("like", () => {
-  it("creates like and increments tweet likes_count", async () => {
+  it("creates like and increments tweet likes_count", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
+
     const authority = Keypair.generate();
     await airdrop(authority.publicKey);
 
     const profile = await createProfile(authority);
-    const profileAccount = await program.account.profile.fetch(profile);
-    const tweet = tweetPda(profile, profileAccount.tweetCount);
-
-    await program.methods
-      .createTweet("first tweet")
-      .accountsStrict({
-        authority: authority.publicKey,
-        tweet,
-        profile,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([authority])
-      .rpc();
+    const rewardConfig = await initRewardConfig(authority);
+    const { mint } = await createNftMintFor(authority, profile, rewardConfig);
+    const tweet = await createTweetFor(
+      authority,
+      profile,
+      rewardConfig,
+      mint,
+      "first tweet"
+    );
 
     const like = likePda(tweet, profile);
     await program.methods
@@ -101,33 +173,36 @@ describe("like", () => {
     expect(likeAccount.rewardClaimed).to.equal(false);
   });
 
-  it("mints reward to tweet author and blocks double claim", async function () {
+  it("mints reward token to tweet author and blocks double claim", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
+
     const author = Keypair.generate();
     const liker = Keypair.generate();
     await airdrop(author.publicKey);
     await airdrop(liker.publicKey);
 
-    const mint = await ensureNftMint(liker);
-    if (!mint) {
-      this.skip();
-    }
+    const tokenMint = await createTokenMint(liker);
+    const authorProfile = await createProfile(author, "author");
+    const likerProfile = await createProfile(liker, "liker");
+    const authorRewardConfig = await initRewardConfig(author);
+    const { mint: authorNftMint } = await createNftMintFor(
+      author,
+      authorProfile,
+      authorRewardConfig
+    );
 
-    const authorProfile = await createProfile(author);
-    const likerProfile = await createProfile(liker);
-
-    const authorProfileAccount = await program.account.profile.fetch(authorProfile);
-    const tweet = tweetPda(authorProfile, authorProfileAccount.tweetCount);
-
-    await program.methods
-      .createTweet("rewardable tweet")
-      .accountsStrict({
-        authority: author.publicKey,
-        tweet,
-        profile: authorProfile,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([author])
-      .rpc();
+    const tweet = await createTweetFor(
+      author,
+      authorProfile,
+      authorRewardConfig,
+      authorNftMint,
+      "rewardable tweet"
+    );
 
     const like = likePda(tweet, likerProfile);
     await program.methods
@@ -143,7 +218,7 @@ describe("like", () => {
       .rpc();
 
     const authorTokenAccount = associatedTokenAddress(
-      mint!,
+      tokenMint,
       author.publicKey,
       TOKEN_PROGRAM_ID
     );
@@ -155,7 +230,7 @@ describe("like", () => {
         tweet,
         profile: likerProfile,
         like,
-        nftMintAccount: mint!,
+        tokenMintAccount: tokenMint,
         authorTokenAccount,
         author: author.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -181,7 +256,7 @@ describe("like", () => {
           tweet,
           profile: likerProfile,
           like,
-          nftMintAccount: mint!,
+          tokenMintAccount: tokenMint,
           authorTokenAccount,
           author: author.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,

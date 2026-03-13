@@ -4,8 +4,11 @@ import {
   Keypair,
   SystemProgram,
   airdrop,
+  profilePda,
+  rewardConfigPda,
   nftMintPda,
   metadataPda,
+  masterEditionPda,
   associatedTokenAddress,
   TOKEN_METADATA_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -14,61 +17,52 @@ import {
 } from "./helpers";
 
 describe("nft_mint", () => {
-  it("creates nft mint and logs PDAs", async function () {
-    const authority = Keypair.generate();
-    await airdrop(authority.publicKey);
-
-    const mint = nftMintPda();
-    const ata = associatedTokenAddress(
-      mint,
-      authority.publicKey,
-      TOKEN_PROGRAM_ID
+  it("initializes reward config and creates profile-scoped nft mint", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
     );
-    const metadata = metadataPda(mint);
-
-    console.log("nft_mint_pda", mint.toBase58());
-    console.log("nft_ata", ata.toBase58());
-    console.log("metadata_pda", metadata.toBase58());
-
-    const preMintInfo = await program.provider.connection.getAccountInfo(mint);
-    const preAtaInfo = await program.provider.connection.getAccountInfo(ata);
-    const preMetadataInfo =
-      await program.provider.connection.getAccountInfo(metadata);
-
-    console.log("mint_account_info_pre", {
-      exists: !!preMintInfo,
-      owner: preMintInfo?.owner.toBase58(),
-      lamports: preMintInfo?.lamports,
-      data_len: preMintInfo?.data?.length,
-    });
-    console.log("ata_account_info_pre", {
-      exists: !!preAtaInfo,
-      owner: preAtaInfo?.owner.toBase58(),
-      lamports: preAtaInfo?.lamports,
-      data_len: preAtaInfo?.data?.length,
-    });
-    console.log("metadata_account_info_pre", {
-      exists: !!preMetadataInfo,
-      owner: preMetadataInfo?.owner.toBase58(),
-      lamports: preMetadataInfo?.lamports,
-      data_len: preMetadataInfo?.data?.length,
-    });
-
-    const metadataProgramInfo =
-      await program.provider.connection.getAccountInfo(
-        TOKEN_METADATA_PROGRAM_ID
-      );
     if (!metadataProgramInfo || !metadataProgramInfo.executable) {
       this.skip();
     }
+
+    const authority = Keypair.generate();
+    await airdrop(authority.publicKey);
+
+    const profile = profilePda(authority.publicKey);
+    await program.methods
+      .createProfile("creator")
+      .accounts({
+        authority: authority.publicKey,
+      })
+      .signers([authority])
+      .rpc();
+
+    const rewardConfig = rewardConfigPda(authority.publicKey);
+    await program.methods
+      .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
+      .accountsStrict({
+        authority: authority.publicKey,
+        rewardConfig,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([authority])
+      .rpc();
+
+    const mint = nftMintPda(rewardConfig, profile);
+    const ata = associatedTokenAddress(mint, authority.publicKey, TOKEN_PROGRAM_ID);
+    const metadata = metadataPda(mint);
+    const masterEdition = masterEditionPda(mint);
 
     const tx = await program.methods
       .createNftMint()
       .accountsStrict({
         authority: authority.publicKey,
+        profile,
+        rewardConfig,
         nftMintAccount: mint,
         nftAssociatedTokenAccount: ata,
         metadataAccount: metadata,
+        masterEditonAccount: masterEdition,
         tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -80,28 +74,21 @@ describe("nft_mint", () => {
 
     expect(tx).to.be.a("string");
 
+    const rewardConfigAccount = await program.account.rewardConfig.fetch(
+      rewardConfig
+    );
+    expect(rewardConfigAccount.name).to.equal("10 Tweets Badge");
+    expect(rewardConfigAccount.symbol).to.equal("TWEET10");
+
     const mintInfo = await program.provider.connection.getAccountInfo(mint);
     const ataInfo = await program.provider.connection.getAccountInfo(ata);
-    const metadataInfo =
-      await program.provider.connection.getAccountInfo(metadata);
+    const metadataInfo = await program.provider.connection.getAccountInfo(metadata);
+    const masterEditionInfo =
+      await program.provider.connection.getAccountInfo(masterEdition);
 
-    console.log("mint_account_info", {
-      exists: !!mintInfo,
-      owner: mintInfo?.owner.toBase58(),
-      lamports: mintInfo?.lamports,
-      data_len: mintInfo?.data?.length,
-    });
-    console.log("ata_account_info", {
-      exists: !!ataInfo,
-      owner: ataInfo?.owner.toBase58(),
-      lamports: ataInfo?.lamports,
-      data_len: ataInfo?.data?.length,
-    });
-    console.log("metadata_account_info", {
-      exists: !!metadataInfo,
-      owner: metadataInfo?.owner.toBase58(),
-      lamports: metadataInfo?.lamports,
-      data_len: metadataInfo?.data?.length,
-    });
+    expect(!!mintInfo).to.equal(true);
+    expect(!!ataInfo).to.equal(true);
+    expect(!!metadataInfo).to.equal(true);
+    expect(!!masterEditionInfo).to.equal(true);
   });
 });

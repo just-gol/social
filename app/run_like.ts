@@ -3,16 +3,19 @@ import { program, programId, rpcUrl, wallet } from "./anchor_env";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   SYSVAR_RENT_PUBKEY,
-  TOKEN_PROGRAM_ID,
   TOKEN_METADATA_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
 } from "./ids";
 import {
   associatedTokenAddress,
   likePda,
+  masterEditionPda,
+  metadataPda,
   nftMintPda,
   profilePda,
+  rewardConfigPda,
+  tokenMintPda,
   tweetPda,
-  metadataPda,
 } from "./pda";
 
 async function main() {
@@ -21,30 +24,51 @@ async function main() {
   console.log("authority", wallet.publicKey.toBase58());
 
   const profile = profilePda(wallet.publicKey);
+  const rewardConfig = rewardConfigPda(wallet.publicKey);
+  const nftMint = nftMintPda(rewardConfig, profile);
+  const nftAta = associatedTokenAddress(nftMint, wallet.publicKey);
+  const nftMetadata = metadataPda(nftMint);
+  const nftMasterEdition = masterEditionPda(nftMint);
+  const tokenMint = tokenMintPda();
+  const tokenMetadata = metadataPda(tokenMint);
+
   const profileInfo = await program.provider.connection.getAccountInfo(profile);
   if (!profileInfo) {
     const tx = await program.methods
       .createProfile("app_user")
-      .accounts({
-        authority: wallet.publicKey,
-      })
+      .accounts({ authority: wallet.publicKey })
       .signers([wallet])
       .rpc();
     console.log("create_profile_tx", tx);
   }
 
-  const mint = nftMintPda();
-  const mintInfo = await program.provider.connection.getAccountInfo(mint);
-  if (!mintInfo) {
-    const ata = associatedTokenAddress(mint, wallet.publicKey);
-    const metadata = metadataPda(mint);
+  const rewardConfigInfo =
+    await program.provider.connection.getAccountInfo(rewardConfig);
+  if (!rewardConfigInfo) {
+    const tx = await program.methods
+      .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
+      .accountsStrict({
+        authority: wallet.publicKey,
+        rewardConfig,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([wallet])
+      .rpc();
+    console.log("init_reward_config_tx", tx);
+  }
+
+  const nftMintInfo = await program.provider.connection.getAccountInfo(nftMint);
+  if (!nftMintInfo) {
     const tx = await program.methods
       .createNftMint()
       .accountsStrict({
         authority: wallet.publicKey,
-        nftMintAccount: mint,
-        nftAssociatedTokenAccount: ata,
-        metadataAccount: metadata,
+        profile,
+        rewardConfig,
+        nftMintAccount: nftMint,
+        nftAssociatedTokenAccount: nftAta,
+        metadataAccount: nftMetadata,
+        masterEditonAccount: nftMasterEdition,
         tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -54,6 +78,24 @@ async function main() {
       .signers([wallet])
       .rpc();
     console.log("create_nft_mint_tx", tx);
+  }
+
+  const tokenMintInfo = await program.provider.connection.getAccountInfo(tokenMint);
+  if (!tokenMintInfo) {
+    const tx = await program.methods
+      .createTokenMint()
+      .accountsStrict({
+        authority: wallet.publicKey,
+        tokenMintAccount: tokenMint,
+        metadataAccount: tokenMetadata,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([wallet])
+      .rpc();
+    console.log("create_token_mint_tx", tx);
   }
 
   const profileAccount = await program.account.profile.fetch(profile);
@@ -66,6 +108,11 @@ async function main() {
         authority: wallet.publicKey,
         tweet,
         profile,
+        nftMintAccount: nftMint,
+        rewardConfig,
+        authorNftAccount: nftAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .signers([wallet])
@@ -90,7 +137,7 @@ async function main() {
     console.log("create_like_tx", tx);
   }
 
-  const authorTokenAccount = associatedTokenAddress(mint, wallet.publicKey);
+  const authorTokenAccount = associatedTokenAddress(tokenMint, wallet.publicKey);
   const rewardTx = await program.methods
     .mintLikeReward()
     .accountsStrict({
@@ -98,7 +145,7 @@ async function main() {
       tweet,
       profile,
       like,
-      nftMintAccount: mint,
+      tokenMintAccount: tokenMint,
       authorTokenAccount,
       author: wallet.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
@@ -109,9 +156,6 @@ async function main() {
     .rpc();
 
   console.log("mint_like_reward_tx", rewardTx);
-
-  const tweetAccount = await program.account.tweet.fetch(tweet);
-  console.log("tweet_account", tweetAccount);
 }
 
 main().catch((err) => {
