@@ -3,14 +3,11 @@ use crate::state::profile::Profile;
 use crate::state::reward_config::RewardConfig;
 use anchor_lang::prelude::*;
 use anchor_spl::metadata::mpl_token_metadata::types::DataV2;
-use anchor_spl::metadata::{
-    create_master_edition_v3, create_metadata_accounts_v3, CreateMasterEditionV3,
-    CreateMetadataAccountsV3,
-};
+use anchor_spl::metadata::{create_metadata_accounts_v3, CreateMetadataAccountsV3};
 use anchor_spl::{
     associated_token::AssociatedToken,
     metadata::Metadata,
-    token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface},
+    token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
 #[derive(Accounts)]
@@ -92,20 +89,6 @@ pub fn create_nft_mint(ctx: Context<CreateNftMint>) -> Result<()> {
         profile_key.as_ref(),
         &[ctx.bumps.nft_mint_account],
     ]];
-    // if ctx.accounts.nft_mint_account.supply == 0 {
-    //     mint_to(
-    //         CpiContext::new_with_signer(
-    //             ctx.accounts.token_program.to_account_info(),
-    //             MintTo {
-    //                 mint: ctx.accounts.nft_mint_account.to_account_info(),
-    //                 to: ctx.accounts.nft_associated_token_account.to_account_info(),
-    //                 authority: ctx.accounts.nft_mint_account.to_account_info(),
-    //             },
-    //             signer_seeds,
-    //         ),
-    //         1,
-    //     )?;
-    // }
     if ctx
         .accounts
         .metadata_account
@@ -138,31 +121,6 @@ pub fn create_nft_mint(ctx: Context<CreateNftMint>) -> Result<()> {
             false,
             true,
             None,
-        )?;
-    }
-    if ctx
-        .accounts
-        .master_editon_account
-        .to_account_info()
-        .data_is_empty()
-    {
-        create_master_edition_v3(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_metadata_program.to_account_info(),
-                CreateMasterEditionV3 {
-                    edition: ctx.accounts.master_editon_account.to_account_info(),
-                    mint: ctx.accounts.nft_mint_account.to_account_info(),
-                    update_authority: ctx.accounts.nft_mint_account.to_account_info(),
-                    mint_authority: ctx.accounts.nft_mint_account.to_account_info(),
-                    payer: ctx.accounts.authority.to_account_info(),
-                    metadata: ctx.accounts.metadata_account.to_account_info(),
-                    token_program: ctx.accounts.token_program.to_account_info(),
-                    system_program: ctx.accounts.system_program.to_account_info(),
-                    rent: ctx.accounts.rent.to_account_info(),
-                },
-                signer_seeds,
-            ),
-            Some(0),
         )?;
     }
     Ok(())

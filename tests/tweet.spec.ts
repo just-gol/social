@@ -89,6 +89,8 @@ describe("tweet", () => {
 
     const before = await program.account.profile.fetch(profile);
     const tweet = tweetPda(profile, before.tweetCount);
+    const metadata = metadataPda(mint);
+    const masterEdition = masterEditionPda(mint);
 
     await program.methods
       .createTweet("hello world")
@@ -103,9 +105,13 @@ describe("tweet", () => {
           authority.publicKey,
           TOKEN_PROGRAM_ID
         ),
+        masterEditonAccount: masterEdition,
+        metadataAccount: metadata,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([authority])
       .rpc();
@@ -138,6 +144,8 @@ describe("tweet", () => {
     const beforeBalance = await program.provider.connection.getTokenAccountBalance(
       ata
     );
+    const metadata = metadataPda(mint);
+    const masterEdition = masterEditionPda(mint);
 
     for (let i = 0; i < 10; i += 1) {
       const profileAccount = await program.account.profile.fetch(profile);
@@ -152,9 +160,13 @@ describe("tweet", () => {
           nftMintAccount: mint,
           rewardConfig,
           authorNftAccount: ata,
+          masterEditonAccount: masterEdition,
+          metadataAccount: metadata,
+          tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
         })
         .signers([authority])
         .rpc();

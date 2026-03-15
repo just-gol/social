@@ -83,12 +83,11 @@ describe("nft_mint", () => {
     const mintInfo = await program.provider.connection.getAccountInfo(mint);
     const ataInfo = await program.provider.connection.getAccountInfo(ata);
     const metadataInfo = await program.provider.connection.getAccountInfo(metadata);
-    const masterEditionInfo =
-      await program.provider.connection.getAccountInfo(masterEdition);
-
     expect(!!mintInfo).to.equal(true);
     expect(!!ataInfo).to.equal(true);
     expect(!!metadataInfo).to.equal(true);
-    expect(!!masterEditionInfo).to.equal(true);
+    expect(
+      await program.provider.connection.getAccountInfo(masterEdition)
+    ).to.equal(null);
   });
 });

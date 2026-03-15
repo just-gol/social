@@ -108,6 +108,8 @@ async function createTweetFor(
     authority.publicKey,
     TOKEN_PROGRAM_ID
   );
+  const metadata = metadataPda(mint);
+  const masterEdition = masterEditionPda(mint);
 
   await program.methods
     .createTweet(content)
@@ -118,9 +120,13 @@ async function createTweetFor(
       nftMintAccount: mint,
       rewardConfig,
       authorNftAccount,
+      masterEditonAccount: masterEdition,
+      metadataAccount: metadata,
+      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
     })
     .signers([authority])
     .rpc();

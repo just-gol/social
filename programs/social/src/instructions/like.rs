@@ -1,4 +1,4 @@
-use crate::state::mint::{NftMint, TokenMint};
+use crate::state::mint::TokenMint;
 use crate::state::profile::Profile;
 use crate::state::tweet::Tweet;
 use crate::{errors::SocialError, state::like::Like};
@@ -87,7 +87,7 @@ pub struct MintLikeReward<'info> {
     )]
     pub author_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK
+    /// CHECK: constrained by `address = tweet.author`.
     #[account(address = tweet.author)]
     pub author: UncheckedAccount<'info>,
 

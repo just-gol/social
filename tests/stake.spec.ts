@@ -1,15 +1,15 @@
 import { expect } from "chai";
+import { PublicKey } from "@solana/web3.js";
 import {
   program,
   Keypair,
-  PublicKey,
   SystemProgram,
   airdrop,
   profilePda,
   rewardConfigPda,
-  tweetPda,
-  nftMintPda,
   tokenMintPda,
+  nftMintPda,
+  tweetPda,
   metadataPda,
   masterEditionPda,
   associatedTokenAddress,
@@ -18,6 +18,13 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   SYSVAR_RENT_PUBKEY,
 } from "./helpers";
+
+function stakePda(authority: PublicKey, mint: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("stake"), authority.toBuffer(), mint.toBuffer()],
+    program.programId
+  )[0];
+}
 
 async function createProfile(authority: any, name = "staker") {
   const profile = profilePda(authority.publicKey);
@@ -34,7 +41,7 @@ async function createProfile(authority: any, name = "staker") {
 async function initRewardConfig(authority: any) {
   const rewardConfig = rewardConfigPda(authority.publicKey);
   await program.methods
-    .initRewardConfig("Stake NFT", "STAKE", "https://example.com/stake-nft")
+    .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
     .accountsStrict({
       authority: authority.publicKey,
       rewardConfig,
@@ -45,7 +52,28 @@ async function initRewardConfig(authority: any) {
   return rewardConfig;
 }
 
-async function createNftMintFor(authority: any, profile: any, rewardConfig: any) {
+async function createTokenMint(authority: any) {
+  const tokenMint = tokenMintPda();
+  const metadata = metadataPda(tokenMint);
+
+  await program.methods
+    .createTokenMint()
+    .accountsStrict({
+      authority: authority.publicKey,
+      tokenMintAccount: tokenMint,
+      metadataAccount: metadata,
+      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
+    })
+    .signers([authority])
+    .rpc();
+
+  return tokenMint;
+}
+
+async function createNftMint(authority: any, profile: PublicKey, rewardConfig: PublicKey) {
   const mint = nftMintPda(rewardConfig, profile);
   const ata = associatedTokenAddress(mint, authority.publicKey, TOKEN_PROGRAM_ID);
   const metadata = metadataPda(mint);
@@ -73,25 +101,40 @@ async function createNftMintFor(authority: any, profile: any, rewardConfig: any)
   return { mint, ata };
 }
 
-async function createTokenMint(authority: any) {
-  const tokenMint = tokenMintPda();
-  const metadata = metadataPda(tokenMint);
+async function createTweet(
+  authority: any,
+  profile: PublicKey,
+  rewardConfig: PublicKey,
+  mint: PublicKey,
+  ata: PublicKey,
+  content: string
+) {
+  const profileAccount = await program.account.profile.fetch(profile);
+  const tweet = tweetPda(profile, profileAccount.tweetCount);
+  const metadata = metadataPda(mint);
+  const masterEdition = masterEditionPda(mint);
 
   await program.methods
-    .createTokenMint()
+    .createTweet(content)
     .accountsStrict({
       authority: authority.publicKey,
-      tokenMintAccount: tokenMint,
+      tweet,
+      profile,
+      nftMintAccount: mint,
+      rewardConfig,
+      authorNftAccount: ata,
+      masterEditonAccount: masterEdition,
       metadataAccount: metadata,
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       tokenProgram: TOKEN_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       rent: SYSVAR_RENT_PUBKEY,
     })
     .signers([authority])
     .rpc();
 
-  return tokenMint;
+  return tweet;
 }
 
 describe("stake", () => {
@@ -104,47 +147,37 @@ describe("stake", () => {
     }
 
     const authority = Keypair.generate();
-    await airdrop(authority.publicKey);
+    await airdrop(authority.publicKey, 2);
 
     const profile = await createProfile(authority);
     const rewardConfig = await initRewardConfig(authority);
-    const { mint: nftMint, ata: authorityNftAccount } = await createNftMintFor(
+    const tokenMint = await createTokenMint(authority);
+    const { mint, ata: authorityNftAccount } = await createNftMint(
       authority,
       profile,
       rewardConfig
     );
-    const tokenMint = await createTokenMint(authority);
 
-    const profileAccount = await program.account.profile.fetch(profile);
-    const tweet = tweetPda(profile, profileAccount.tweetCount);
-    await program.methods
-      .createTweet("stake tweet")
-      .accountsStrict({
-        authority: authority.publicKey,
-        tweet,
+    let lastTweet = PublicKey.default;
+    for (let i = 0; i < 10; i += 1) {
+      lastTweet = await createTweet(
+        authority,
         profile,
-        nftMintAccount: nftMint,
         rewardConfig,
-        authorNftAccount: authorityNftAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([authority])
-      .rpc();
+        mint,
+        authorityNftAccount,
+        `stake-tweet-${i}`
+      );
+    }
 
-    const stakeAddress = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("stake"),
-        authority.publicKey.toBuffer(),
-        nftMint.toBuffer(),
-      ],
-      program.programId
-    )[0];
+    const authorityNftBalanceBefore =
+      await program.provider.connection.getTokenAccountBalance(authorityNftAccount);
+    expect(authorityNftBalanceBefore.value.amount).to.equal("1");
 
-    const stakeAta = associatedTokenAddress(
-      nftMint,
-      stakeAddress,
+    const stake = stakePda(authority.publicKey, mint);
+    const stakeAssociatedTokenAccount = associatedTokenAddress(
+      mint,
+      stake,
       TOKEN_PROGRAM_ID
     );
     const authorityTokenAccount = associatedTokenAddress(
@@ -157,11 +190,11 @@ describe("stake", () => {
       .createStake()
       .accountsStrict({
         authority: authority.publicKey,
-        stake: stakeAddress,
-        tweet,
+        stake,
+        tweet: lastTweet,
         profile,
-        nftMintAccount: nftMint,
-        stakeAssociatedTokenAccount: stakeAta,
+        nftMintAccount: mint,
+        stakeAssociatedTokenAccount,
         authorityNftAccount,
         rewardConfig,
         tokenMintAccount: tokenMint,
@@ -175,24 +208,24 @@ describe("stake", () => {
       .signers([authority])
       .rpc();
 
-    const stakeAccount = await program.account.stake.fetch(stakeAddress);
+    const authorityNftBalanceAfter =
+      await program.provider.connection.getTokenAccountBalance(authorityNftAccount);
+    expect(authorityNftBalanceAfter.value.amount).to.equal("0");
+
+    const stakeNftBalance = await program.provider.connection.getTokenAccountBalance(
+      stakeAssociatedTokenAccount
+    );
+    expect(stakeNftBalance.value.amount).to.equal("1");
+
+    const rewardBalance = await program.provider.connection.getTokenAccountBalance(
+      authorityTokenAccount
+    );
+    expect(rewardBalance.value.amount).to.equal("10000");
+
+    const stakeAccount = await program.account.stake.fetch(stake);
     expect(stakeAccount.authority.toBase58()).to.equal(
       authority.publicKey.toBase58()
     );
-    expect(stakeAccount.mint.toBase58()).to.equal(nftMint.toBase58());
-
-    const authorityNftBalance =
-      await program.provider.connection.getTokenAccountBalance(authorityNftAccount);
-    expect(authorityNftBalance.value.amount).to.equal("0");
-
-    const stakeNftBalance =
-      await program.provider.connection.getTokenAccountBalance(stakeAta);
-    expect(stakeNftBalance.value.amount).to.equal("1");
-
-    const rewardBalance =
-      await program.provider.connection.getTokenAccountBalance(
-        authorityTokenAccount
-      );
-    expect(rewardBalance.value.amount).to.equal("10000");
+    expect(stakeAccount.mint.toBase58()).to.equal(mint.toBase58());
   });
 });

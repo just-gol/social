@@ -111,9 +111,13 @@ async function main() {
         nftMintAccount: nftMint,
         rewardConfig,
         authorNftAccount: nftAta,
+        masterEditonAccount: nftMasterEdition,
+        metadataAccount: nftMetadata,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([wallet])
       .rpc();
