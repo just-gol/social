@@ -12,4 +12,8 @@ pub enum SocialError {
     InvalidProfilePda,
     #[msg("Invalid tweet pda")]
     InvalidTweetPda,
+    #[msg("Nft mint not minted")]
+    NftMintNotMinted,
+    #[msg("Invalid tweet author")]
+    InvalidTweetAuthor,
 }

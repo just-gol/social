@@ -8,3 +8,5 @@ pub use like::*;
 pub use tweet::*;
 pub mod mint;
 pub use mint::*;
+pub mod stake;
+pub use stake::*;

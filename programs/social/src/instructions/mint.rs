@@ -48,7 +48,7 @@ pub struct CreateNftMint<'info> {
     pub nft_mint_account: InterfaceAccount<'info, Mint>,
 
     #[account(
-      init_if_needed,
+      init,
       payer = authority,
       associated_token::mint = nft_mint_account,
       associated_token::authority = authority,
@@ -92,20 +92,20 @@ pub fn create_nft_mint(ctx: Context<CreateNftMint>) -> Result<()> {
         profile_key.as_ref(),
         &[ctx.bumps.nft_mint_account],
     ]];
-    if ctx.accounts.nft_mint_account.supply == 0 {
-        mint_to(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                MintTo {
-                    mint: ctx.accounts.nft_mint_account.to_account_info(),
-                    to: ctx.accounts.nft_associated_token_account.to_account_info(),
-                    authority: ctx.accounts.nft_mint_account.to_account_info(),
-                },
-                signer_seeds,
-            ),
-            1,
-        )?;
-    }
+    // if ctx.accounts.nft_mint_account.supply == 0 {
+    //     mint_to(
+    //         CpiContext::new_with_signer(
+    //             ctx.accounts.token_program.to_account_info(),
+    //             MintTo {
+    //                 mint: ctx.accounts.nft_mint_account.to_account_info(),
+    //                 to: ctx.accounts.nft_associated_token_account.to_account_info(),
+    //                 authority: ctx.accounts.nft_mint_account.to_account_info(),
+    //             },
+    //             signer_seeds,
+    //         ),
+    //         1,
+    //     )?;
+    // }
     if ctx
         .accounts
         .metadata_account

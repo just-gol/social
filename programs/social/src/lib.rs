@@ -39,4 +39,8 @@ pub mod social {
     pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
         instructions::mint_like_reward(ctx)
     }
+
+    pub fn create_stake(ctx: Context<CreateStake>) -> Result<()> {
+        instructions::create_stake(ctx)
+    }
 }
