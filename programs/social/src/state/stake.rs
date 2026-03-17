@@ -5,7 +5,7 @@ use anchor_lang::prelude::*;
 pub struct Stake {
     pub authority: Pubkey,
     pub mint: Pubkey,
-    pub at: i64,
+    pub at: u64,
 }
 
 impl Stake {
@@ -15,7 +15,7 @@ impl Stake {
         Self {
             authority,
             mint,
-            at: Clock::get().unwrap().unix_timestamp,
+            at: Clock::get().unwrap().epoch,
         }
     }
 }

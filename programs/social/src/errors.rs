@@ -16,4 +16,8 @@ pub enum SocialError {
     NftMintNotMinted,
     #[msg("Invalid tweet author")]
     InvalidTweetAuthor,
+    #[msg("Invalid stake authority")]
+    InvalidStakeAuthority,
+    #[msg("Invalid stake mint")]
+    InvalidStakeMint,
 }

@@ -43,4 +43,8 @@ pub mod social {
     pub fn create_stake(ctx: Context<CreateStake>) -> Result<()> {
         instructions::create_stake(ctx)
     }
+
+    pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
+        instructions::unstake(ctx)
+    }
 }
