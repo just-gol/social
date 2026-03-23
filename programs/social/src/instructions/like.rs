@@ -118,7 +118,10 @@ pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
                 to: ctx.accounts.author_token_account.to_account_info(),
                 authority: ctx.accounts.token_mint_account.to_account_info(),
             },
-            &[&[b"mint", &[ctx.bumps.token_mint_account]]],
+            &[&[
+                TokenMint::TOKEN_MINT_PREFIX,
+                &[ctx.bumps.token_mint_account],
+            ]],
         ),
         1,
     )?;
