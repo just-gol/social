@@ -6,12 +6,16 @@ pub enum SocialError {
     TweetCountOverflow,
     #[msg("Likes count overflow")]
     LikesOverflow,
+    #[msg("Reward amount overflow")]
+    RewardAmountOverflow,
     #[msg("Reward already claimed")]
     RewardAlreadyClaimed,
     #[msg("Invalid profile pda")]
     InvalidProfilePda,
     #[msg("Invalid tweet pda")]
     InvalidTweetPda,
+    #[msg("Invalid author profile")]
+    InvalidAuthorProfile,
     #[msg("Nft mint not minted")]
     NftMintNotMinted,
     #[msg("Invalid tweet author")]
@@ -20,4 +24,20 @@ pub enum SocialError {
     InvalidStakeAuthority,
     #[msg("Invalid stake mint")]
     InvalidStakeMint,
+    #[msg("Only reward config authority can update config")]
+    InvalidRewardConfigAuthority,
+    #[msg("Self like is not allowed")]
+    SelfLikeNotAllowed,
+    #[msg("Tweet has been deleted")]
+    TweetDeleted,
+    #[msg("Tweet is already deleted")]
+    TweetAlreadyDeleted,
+    #[msg("Daily tweet cap exceeded")]
+    DailyTweetCapExceeded,
+    #[msg("Daily like reward cap exceeded")]
+    DailyLikeRewardCapExceeded,
+    #[msg("Tweet reward cap exceeded")]
+    TweetLikeRewardCapExceeded,
+    #[msg("Author is not eligible for like rewards yet")]
+    AuthorNotEligibleForLikeReward,
 }

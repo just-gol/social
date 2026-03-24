@@ -1,12 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{burn, transfer_checked, Burn, TransferChecked},
-    token_interface::{Mint, TokenAccount, TokenInterface},
+    token::transfer_checked,
+    token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface},
 };
 
 use crate::{
     errors::SocialError,
+    events::{RewardIssued, RewardKind, StakeClosed},
     state::{
         mint::{NftMint, TokenMint},
         profile::Profile,
@@ -32,16 +33,14 @@ pub struct Unstake<'info> {
     )]
     pub stake: Account<'info, Stake>,
 
-    #[
-      account(
+    #[account(
         mut,
         seeds = [
           Profile::PROFILE_PREFIX,
           authority.key().as_ref(),
         ],
         bump
-      )
-    ]
+      )]
     pub profile: Account<'info, Profile>,
 
     #[account(
@@ -72,7 +71,10 @@ pub struct Unstake<'info> {
     )]
     pub authority_nft_account: InterfaceAccount<'info, TokenAccount>,
 
-    #[account()]
+    #[account(
+        seeds = [RewardConfig::REWARD_CONFIG_PREFIX],
+        bump
+    )]
     pub reward_config: Account<'info, RewardConfig>,
 
     #[account(
@@ -83,12 +85,13 @@ pub struct Unstake<'info> {
     pub token_mint_account: InterfaceAccount<'info, Mint>,
 
     #[account(
-      mut,
+      init_if_needed,
+      payer = authority,
       associated_token::mint = token_mint_account,
       associated_token::authority = authority,
       associated_token::token_program = token_program,
   )]
-    pub author_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub authority_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub system_program: Program<'info, System>,
 
@@ -100,9 +103,6 @@ pub struct Unstake<'info> {
 }
 
 pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
-    const BASE_BURN_AMOUNT: u64 = 10000;
-    const REWARD_PER_EPOCH: u64 = 200;
-
     require!(
         ctx.accounts.stake.authority.key() == ctx.accounts.authority.key(),
         SocialError::InvalidStakeAuthority
@@ -114,7 +114,7 @@ pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
     transfer_checked(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            TransferChecked {
+            anchor_spl::token::TransferChecked {
                 from: ctx
                     .accounts
                     .stake_associated_token_account
@@ -136,21 +136,46 @@ pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
 
     let current_epoch = Clock::get()?.epoch;
     let elapsed_epochs = current_epoch.saturating_sub(ctx.accounts.stake.at);
-    let reward_amount = elapsed_epochs.saturating_mul(REWARD_PER_EPOCH);
-    let burn_amount = BASE_BURN_AMOUNT.saturating_sub(reward_amount);
+    let reward_amount = ctx
+        .accounts
+        .reward_config
+        .stake_base_reward_amount
+        .checked_add(
+            elapsed_epochs.saturating_mul(ctx.accounts.reward_config.stake_reward_per_epoch),
+        )
+        .ok_or(SocialError::RewardAmountOverflow)?;
 
-    if burn_amount > 0 {
-        burn(
-            CpiContext::new(
+    if reward_amount > 0 {
+        mint_to(
+            CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                Burn {
+                MintTo {
                     mint: ctx.accounts.token_mint_account.to_account_info(),
-                    from: ctx.accounts.author_token_account.to_account_info(),
-                    authority: ctx.accounts.authority.to_account_info(),
+                    to: ctx.accounts.authority_token_account.to_account_info(),
+                    authority: ctx.accounts.token_mint_account.to_account_info(),
                 },
+                &[&[
+                    TokenMint::TOKEN_MINT_PREFIX,
+                    &[ctx.bumps.token_mint_account],
+                ]],
             ),
-            burn_amount,
+            reward_amount,
         )?;
+        ctx.accounts.profile.add_token_rewards(reward_amount)?;
+        emit!(RewardIssued {
+            recipient: ctx.accounts.authority.key(),
+            reference: ctx.accounts.stake.key(),
+            reward_kind: RewardKind::StakeToken,
+            amount: reward_amount,
+        });
     }
+
+    emit!(StakeClosed {
+        authority: ctx.accounts.authority.key(),
+        stake: ctx.accounts.stake.key(),
+        mint: ctx.accounts.nft_mint_account.key(),
+        reward_amount,
+        elapsed_epochs,
+    });
     Ok(())
 }

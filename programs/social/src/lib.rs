@@ -4,13 +4,19 @@ declare_id!("9BXzYsCbqFLwTzkqognW18JiZa7DrzhccsifMHSjcwxS");
 pub mod instructions;
 use instructions::*;
 pub mod errors;
+pub mod events;
 pub mod state;
 #[program]
 pub mod social {
     use super::*;
 
-    pub fn create_profile(ctx: Context<CreateProfile>, username: String) -> Result<()> {
-        instructions::create_profile(ctx, username)
+    pub fn create_profile(
+        ctx: Context<CreateProfile>,
+        username: String,
+        bio: String,
+        avatar_uri: String,
+    ) -> Result<()> {
+        instructions::create_profile(ctx, username, bio, avatar_uri)
     }
 
     pub fn create_tweet(ctx: Context<CreateTweet>, content: String) -> Result<()> {
@@ -21,11 +27,66 @@ pub mod social {
         name: String,
         symbol: String,
         uri: String,
+        milestone_tweet_count: u32,
+        like_reward_amount: u64,
+        stake_base_reward_amount: u64,
+        stake_reward_per_epoch: u64,
+        daily_tweet_reward_cap: u32,
+        daily_like_reward_cap: u32,
+        max_rewardable_likes_per_tweet: u32,
+        min_tweets_before_like_reward: u32,
     ) -> Result<()> {
-        instructions::init_reward_config(ctx, name, symbol, uri)
+        instructions::init_reward_config(
+            ctx,
+            name,
+            symbol,
+            uri,
+            milestone_tweet_count,
+            like_reward_amount,
+            stake_base_reward_amount,
+            stake_reward_per_epoch,
+            daily_tweet_reward_cap,
+            daily_like_reward_cap,
+            max_rewardable_likes_per_tweet,
+            min_tweets_before_like_reward,
+        )
+    }
+
+    pub fn update_reward_config(
+        ctx: Context<UpdateRewardConfig>,
+        name: String,
+        symbol: String,
+        uri: String,
+        milestone_tweet_count: u32,
+        like_reward_amount: u64,
+        stake_base_reward_amount: u64,
+        stake_reward_per_epoch: u64,
+        daily_tweet_reward_cap: u32,
+        daily_like_reward_cap: u32,
+        max_rewardable_likes_per_tweet: u32,
+        min_tweets_before_like_reward: u32,
+    ) -> Result<()> {
+        instructions::update_reward_config(
+            ctx,
+            name,
+            symbol,
+            uri,
+            milestone_tweet_count,
+            like_reward_amount,
+            stake_base_reward_amount,
+            stake_reward_per_epoch,
+            daily_tweet_reward_cap,
+            daily_like_reward_cap,
+            max_rewardable_likes_per_tweet,
+            min_tweets_before_like_reward,
+        )
     }
     pub fn create_like(ctx: Context<CreateLike>) -> Result<()> {
         instructions::create_like(ctx)
+    }
+
+    pub fn delete_tweet(ctx: Context<DeleteTweet>) -> Result<()> {
+        instructions::delete_tweet(ctx)
     }
 
     pub fn create_nft_mint(ctx: Context<CreateNftMint>) -> Result<()> {

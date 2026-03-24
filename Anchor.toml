@@ -16,6 +16,9 @@ url = "https://api.apr.dev"
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
+[test.validator]
+slots_per_epoch = "32"
+
 [scripts]
 test = "bash -lc 'FILE=${TEST_FILE:-tests/**/*.ts}; yarn run ts-mocha -p ./tsconfig.json -t 1000000 $FILE'"
 nft_mint = "npx ts-node app/nft_mint_example.ts"

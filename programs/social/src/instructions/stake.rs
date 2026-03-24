@@ -1,19 +1,14 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_interface::{
-        mint_to, transfer_checked, Mint, MintTo, TokenAccount, TokenInterface, TransferChecked,
-    },
+    token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
 use crate::{
     errors::SocialError,
+    events::StakeCreated,
     state::{
-        mint::{NftMint, TokenMint},
-        profile::Profile,
-        reward_config::RewardConfig,
-        stake::Stake,
-        tweet::Tweet,
+        mint::NftMint, profile::Profile, reward_config::RewardConfig, stake::Stake, tweet::Tweet,
     },
 };
 
@@ -41,16 +36,14 @@ pub struct CreateStake<'info> {
   )]
     pub tweet: Account<'info, Tweet>,
 
-    #[
-      account(
+    #[account(
         mut,
         seeds = [
           Profile::PROFILE_PREFIX,
           authority.key().as_ref(),
         ],
         bump
-      )
-    ]
+      )]
     pub profile: Account<'info, Profile>,
 
     #[account(
@@ -82,28 +75,11 @@ pub struct CreateStake<'info> {
     )]
     pub authority_nft_account: InterfaceAccount<'info, TokenAccount>,
 
-    #[account()]
+    #[account(
+        seeds = [RewardConfig::REWARD_CONFIG_PREFIX],
+        bump
+    )]
     pub reward_config: Account<'info, RewardConfig>,
-
-    #[account(
-      mut,
-      seeds = [TokenMint::TOKEN_MINT_PREFIX],
-      bump,
-  )]
-    pub token_mint_account: InterfaceAccount<'info, Mint>,
-
-    #[account(
-      init_if_needed,
-      payer = authority,
-      associated_token::mint = token_mint_account,
-      associated_token::authority = author,
-      associated_token::token_program = token_program,
-  )]
-    pub author_token_account: InterfaceAccount<'info, TokenAccount>,
-
-    /// CHECK: constrained by `address = tweet.author`
-    #[account(address = tweet.author)]
-    pub author: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 
@@ -119,6 +95,7 @@ pub fn create_stake(ctx: Context<CreateStake>) -> Result<()> {
         ctx.accounts.nft_mint_account.supply == 1,
         SocialError::NftMintNotMinted
     );
+    require!(!ctx.accounts.tweet.deleted, SocialError::TweetDeleted);
 
     ctx.accounts.stake.set_inner(Stake::new(
         ctx.accounts.authority.key(),
@@ -141,21 +118,13 @@ pub fn create_stake(ctx: Context<CreateStake>) -> Result<()> {
         1,
         0,
     )?;
-    mint_to(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            MintTo {
-                mint: ctx.accounts.token_mint_account.to_account_info(),
-                to: ctx.accounts.author_token_account.to_account_info(),
-                authority: ctx.accounts.token_mint_account.to_account_info(),
-            },
-            &[&[
-                TokenMint::TOKEN_MINT_PREFIX,
-                &[ctx.bumps.token_mint_account],
-            ]],
-        ),
-        10000,
-    )?;
+
+    emit!(StakeCreated {
+        authority: ctx.accounts.authority.key(),
+        stake: ctx.accounts.stake.key(),
+        mint: ctx.accounts.nft_mint_account.key(),
+        started_at_epoch: ctx.accounts.stake.at,
+    });
 
     Ok(())
 }

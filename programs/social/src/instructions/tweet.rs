@@ -1,11 +1,14 @@
+use crate::events::{RewardIssued, RewardKind, TweetCreated, TweetDeleted};
 use crate::state::mint::NftMint;
 use crate::state::profile::Profile;
 use crate::state::reward_config::RewardConfig;
 use crate::state::tweet::Tweet;
+use crate::errors::SocialError;
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::metadata::{create_master_edition_v3, CreateMasterEditionV3, Metadata};
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
+
 #[derive(Accounts)]
 pub struct CreateTweet<'info> {
     #[account(mut)]
@@ -19,16 +22,14 @@ pub struct CreateTweet<'info> {
     )]
     pub tweet: Account<'info, Tweet>,
 
-    #[
-      account(
+    #[account(
         mut,
         seeds = [
-          Profile::PROFILE_PREFIX,
-          authority.key().as_ref(),
+            Profile::PROFILE_PREFIX,
+            authority.key().as_ref(),
         ],
         bump
-      )
-    ]
+    )]
     pub profile: Account<'info, Profile>,
 
     #[account(
@@ -42,7 +43,10 @@ pub struct CreateTweet<'info> {
   )]
     pub nft_mint_account: InterfaceAccount<'info, Mint>,
 
-    #[account()]
+    #[account(
+        seeds = [RewardConfig::REWARD_CONFIG_PREFIX],
+        bump
+    )]
     pub reward_config: Account<'info, RewardConfig>,
 
     #[account(
@@ -83,14 +87,48 @@ pub struct CreateTweet<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
+#[derive(Accounts)]
+pub struct DeleteTweet<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = tweet.author == authority.key() @ SocialError::InvalidTweetAuthor
+    )]
+    pub tweet: Account<'info, Tweet>,
+
+    #[account(
+        seeds = [
+            Profile::PROFILE_PREFIX,
+            authority.key().as_ref(),
+        ],
+        bump
+    )]
+    pub profile: Account<'info, Profile>,
+}
+
 pub fn create_tweet(ctx: Context<CreateTweet>, content: String) -> Result<()> {
     let reward_config_key = ctx.accounts.reward_config.key();
     let profile_key = ctx.accounts.profile.key();
-    let tweet = Tweet::new(content, ctx.accounts.authority.key());
+    let created_at = Clock::get()?.unix_timestamp;
+    let current_day = created_at.div_euclid(86_400);
+    ctx.accounts.profile.register_tweet(
+        current_day,
+        ctx.accounts.reward_config.daily_tweet_reward_cap,
+    )?;
+
+    let tweet = Tweet::new(content, ctx.accounts.authority.key(), created_at);
     ctx.accounts.tweet.set_inner(tweet);
-    ctx.accounts.profile.increment_tweet_count()?;
-    if ctx.accounts.profile.reward {
-        ctx.accounts.profile.reward = false;
+    emit!(TweetCreated {
+        authority: ctx.accounts.authority.key(),
+        profile: ctx.accounts.profile.key(),
+        tweet: ctx.accounts.tweet.key(),
+        created_at,
+    });
+
+    if ctx.accounts.profile.tweet_count == ctx.accounts.reward_config.milestone_tweet_count
+        && ctx.accounts.nft_mint_account.supply == 0
+    {
         mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
@@ -139,6 +177,23 @@ pub fn create_tweet(ctx: Context<CreateTweet>, content: String) -> Result<()> {
                 Some(0),
             )?;
         }
+        ctx.accounts.profile.add_nft_reward()?;
+        emit!(RewardIssued {
+            recipient: ctx.accounts.authority.key(),
+            reference: ctx.accounts.tweet.key(),
+            reward_kind: RewardKind::MilestoneNft,
+            amount: 1,
+        });
     }
+    Ok(())
+}
+
+pub fn delete_tweet(ctx: Context<DeleteTweet>) -> Result<()> {
+    let _ = &ctx.accounts.profile;
+    ctx.accounts.tweet.delete()?;
+    emit!(TweetDeleted {
+        authority: ctx.accounts.authority.key(),
+        tweet: ctx.accounts.tweet.key(),
+    });
     Ok(())
 }
