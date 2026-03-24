@@ -21,6 +21,14 @@ import {
   DEFAULT_REWARD_CONFIG,
 } from "./helpers";
 
+async function getMintTokenProgram(mint: anchor.web3.PublicKey) {
+  const info = await program.provider.connection.getAccountInfo(mint);
+  if (!info) {
+    throw new Error(`mint not found: ${mint.toBase58()}`);
+  }
+  return info.owner;
+}
+
 async function createProfile(authority: any, name = "user") {
   const profile = profilePda(authority.publicKey);
   await program.methods
@@ -300,26 +308,26 @@ describe("like", () => {
     const authorTokenAccount = associatedTokenAddress(
       tokenMint,
       author.publicKey,
-      TOKEN_PROGRAM_ID
+      await getMintTokenProgram(tokenMint)
     );
+    const tokenProgram = await getMintTokenProgram(tokenMint);
 
     await program.methods
       .mintLikeReward()
       .accountsStrict({
-        authority: liker.publicKey,
+        authority: author.publicKey,
         tweet,
-        profile: likerProfile,
-        like,
         authorProfile,
+        like,
+        likerProfile: likerProfile,
         rewardConfig: authorRewardConfig,
         tokenMintAccount: tokenMint,
-        authorTokenAccount,
-        author: author.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        authorityTokenAccount: authorTokenAccount,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([liker])
+      .signers([author])
       .rpc();
 
     const likeAccount = await program.account.like.fetch(like);
@@ -341,20 +349,19 @@ describe("like", () => {
       await program.methods
         .mintLikeReward()
         .accountsStrict({
-          authority: liker.publicKey,
+          authority: author.publicKey,
           tweet,
-          profile: likerProfile,
-          like,
           authorProfile,
+          like,
+          likerProfile: likerProfile,
           rewardConfig: authorRewardConfig,
           tokenMintAccount: tokenMint,
-          authorTokenAccount,
-          author: author.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          authorityTokenAccount: authorTokenAccount,
+          tokenProgram,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([liker])
+        .signers([author])
         .rpc();
       expect.fail("second reward claim should fail");
     } catch (error) {
@@ -381,13 +388,19 @@ describe("like", () => {
 
     const authorProfile = await createProfile(author, "author");
     const rewardConfig = await initRewardConfig(author, {
-      dailyLikeRewardCap: 1,
+      dailyLikeRewardCap: 10,
       maxRewardableLikesPerTweet: 1,
       minTweetsBeforeLikeReward: 2,
       milestoneTweetCount: 99,
     });
     const { mint } = await createNftMintFor(author, authorProfile, rewardConfig);
     const tokenMint = await createTokenMint(likerOne);
+    const tokenProgram = await getMintTokenProgram(tokenMint);
+    const authorTokenAccount = associatedTokenAddress(
+      tokenMint,
+      author.publicKey,
+      tokenProgram
+    );
     await createTweetFor(author, authorProfile, rewardConfig, mint, "bootstrap-1");
     await createTweetFor(author, authorProfile, rewardConfig, mint, "bootstrap-2");
     const tweet = await createTweetFor(author, authorProfile, rewardConfig, mint, "rewardable");
@@ -409,24 +422,19 @@ describe("like", () => {
     await program.methods
       .mintLikeReward()
       .accountsStrict({
-        authority: likerOne.publicKey,
+        authority: author.publicKey,
         tweet,
-        profile: likerOneProfile,
-        like: likeOne,
         authorProfile,
+        like: likeOne,
+        likerProfile: likerOneProfile,
         rewardConfig,
         tokenMintAccount: tokenMint,
-        authorTokenAccount: associatedTokenAddress(
-          tokenMint,
-          author.publicKey,
-          TOKEN_PROGRAM_ID
-        ),
-        author: author.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        authorityTokenAccount: authorTokenAccount,
+        tokenProgram,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([likerOne])
+      .signers([author])
       .rpc();
 
     const likerTwoProfile = await createProfile(likerTwo, "liker-two");
@@ -447,24 +455,19 @@ describe("like", () => {
       await program.methods
         .mintLikeReward()
         .accountsStrict({
-          authority: likerTwo.publicKey,
+          authority: author.publicKey,
           tweet,
-          profile: likerTwoProfile,
-          like: likeTwo,
           authorProfile,
+          like: likeTwo,
+          likerProfile: likerTwoProfile,
           rewardConfig,
           tokenMintAccount: tokenMint,
-          authorTokenAccount: associatedTokenAddress(
-            tokenMint,
-            author.publicKey,
-            TOKEN_PROGRAM_ID
-          ),
-          author: author.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          authorityTokenAccount: authorTokenAccount,
+          tokenProgram,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([likerTwo])
+        .signers([author])
         .rpc();
       expect.fail("tweet reward cap should fail");
     } catch (error) {

@@ -149,6 +149,8 @@ export type ProfileView = {
 
 export type LikeView = {
   address: string;
+  profileAddress: string;
+  tweetAddress: string;
   rewardClaimed: boolean;
   createdAt: number;
 };
@@ -165,6 +167,7 @@ export type TweetView = {
   createdAt: number;
   deleted: boolean;
   viewerLike: LikeView | null;
+  claimableAuthorLike: LikeView | null;
 };
 
 export type StakeView = {
@@ -341,7 +344,9 @@ async function fetchDecodedAccount<T>(
 }
 
 async function fetchTokenBalance(connection: Connection, mint: PublicKey, owner: PublicKey) {
-  const ata = associatedTokenAddress(mint, owner);
+  const mintInfo = await connection.getAccountInfo(mint);
+  const mintProgram = mintInfo?.owner ?? tokenProgramId;
+  const ata = associatedTokenAddress(mint, owner, mintProgram);
   const info = await connection.getAccountInfo(ata);
   if (!info) {
     return { address: ata.toBase58(), amount: "0" };
@@ -417,32 +422,23 @@ export async function loadAppState(
     }
   });
 
-  let likeMap = new Map<string, LikeView>();
-  if (viewerProfile) {
-    const viewerProfileKey = new PublicKey(viewerProfile.address);
-    const likeAddresses = tweetRecords.map((entry) =>
-      likePda(entry.publicKey, viewerProfileKey)
-    );
-    const likeInfos = await connection.getMultipleAccountsInfo(likeAddresses);
-    const coder = createAccountsCoder();
-    likeMap = new Map(
-      likeInfos.flatMap((info, index) => {
-        if (!info) {
-          return [];
-        }
-        const decoded = coder.decode("Like", info.data) as RawLike;
-        return [
-          [
-            likeAddresses[index].toBase58(),
-            {
-              address: likeAddresses[index].toBase58(),
-              rewardClaimed: decoded.reward_claimed ?? decoded.rewardClaimed ?? false,
-              createdAt: toNumber(decoded.created_at ?? decoded.createdAt ?? 0),
-            } satisfies LikeView,
-          ],
-        ];
-      })
-    );
+  const likeRecords = await program.account.like.all();
+  const likeViews = likeRecords.map((entry) => {
+    const raw = entry.account as unknown as RawLike;
+    return {
+      address: entry.publicKey.toBase58(),
+      profileAddress: (raw.profile_pda ?? raw.profilePda)!.toBase58(),
+      tweetAddress: (raw.tweet_pda ?? raw.tweetPda)!.toBase58(),
+      rewardClaimed: raw.reward_claimed ?? raw.rewardClaimed ?? false,
+      createdAt: toNumber(raw.created_at ?? raw.createdAt ?? 0),
+    } satisfies LikeView;
+  });
+  const likeMap = new Map(likeViews.map((view) => [view.address, view]));
+  const claimableLikeByTweet = new Map<string, LikeView>();
+  for (const like of likeViews) {
+    if (!like.rewardClaimed && !claimableLikeByTweet.has(like.tweetAddress)) {
+      claimableLikeByTweet.set(like.tweetAddress, like);
+    }
   }
 
   const tweets = tweetRecords
@@ -468,6 +464,7 @@ export async function loadAppState(
         createdAt: toNumber(raw.created_at ?? raw.createdAt ?? 0),
         deleted: raw.deleted,
         viewerLike: viewerLikeAddress ? likeMap.get(viewerLikeAddress) ?? null : null,
+        claimableAuthorLike: claimableLikeByTweet.get(entry.publicKey.toBase58()) ?? null,
       } satisfies TweetView;
     })
     .filter((tweet) => !tweet.deleted)
@@ -560,6 +557,14 @@ async function requireRewardConfig(connection: Connection) {
     throw new Error("Initialize the global RewardConfig first.");
   }
   return config;
+}
+
+async function requireTokenMintProgram(connection: Connection, mint: PublicKey) {
+  const mintInfo = await connection.getAccountInfo(mint);
+  if (!mintInfo) {
+    throw new Error("Create the global Token Mint first.");
+  }
+  return mintInfo.owner;
 }
 
 export async function createProfileTx(
@@ -755,25 +760,31 @@ export async function mintLikeRewardTx(
   const authority = assertWallet(provider);
   const program = createProgram(provider);
   const rewardConfig = await requireRewardConfig(provider.connection);
-  const profile = await requireProfile(provider.connection, authority);
-  const profileKey = new PublicKey(profile.address);
+  const authorProfile = await requireProfile(provider.connection, authority);
+  const authorProfileKey = new PublicKey(authorProfile.address);
   const tweetKey = new PublicKey(tweet.address);
-  const authorKey = new PublicKey(tweet.author);
-  const authorProfileKey = profilePda(authorKey);
+  if (tweet.author !== authority.toBase58()) {
+    throw new Error("Only the tweet author can settle this reward.");
+  }
+  const claimableLike = tweet.claimableAuthorLike;
+  if (!claimableLike) {
+    throw new Error("This tweet has no pending like rewards to settle.");
+  }
+  const likerProfileKey = new PublicKey(claimableLike.profileAddress);
   const tokenMint = tokenMintPda();
+  const tokenMintProgram = await requireTokenMintProgram(provider.connection, tokenMint);
   return program.methods
     .mintLikeReward()
     .accountsStrict({
       authority,
       tweet: tweetKey,
-      profile: profileKey,
-      like: likePda(tweetKey, profileKey),
       authorProfile: authorProfileKey,
+      like: new PublicKey(claimableLike.address),
+      likerProfile: likerProfileKey,
       rewardConfig: new PublicKey(rewardConfig.address),
       tokenMintAccount: tokenMint,
-      authorTokenAccount: associatedTokenAddress(tokenMint, authorKey),
-      author: authorKey,
-      tokenProgram: tokenProgramId,
+      authorityTokenAccount: associatedTokenAddress(tokenMint, authority, tokenMintProgram),
+      tokenProgram: tokenMintProgram,
       associatedTokenProgram: associatedTokenProgramId,
       systemProgram: SystemProgram.programId,
     })
@@ -821,6 +832,7 @@ export async function unstakeTx(provider: AnchorProvider) {
   const nftMint = nftMintPda(rewardConfigKey, profileKey);
   const stake = stakePda(authority, nftMint);
   const tokenMint = tokenMintPda();
+  const tokenMintProgram = await requireTokenMintProgram(provider.connection, tokenMint);
   return program.methods
     .unstake()
     .accountsStrict({
@@ -832,9 +844,9 @@ export async function unstakeTx(provider: AnchorProvider) {
       authorityNftAccount: associatedTokenAddress(nftMint, authority),
       rewardConfig: rewardConfigKey,
       tokenMintAccount: tokenMint,
-      authorityTokenAccount: associatedTokenAddress(tokenMint, authority),
+      authorityTokenAccount: associatedTokenAddress(tokenMint, authority, tokenMintProgram),
       systemProgram: SystemProgram.programId,
-      tokenProgram: tokenProgramId,
+      tokenProgram: tokenMintProgram,
       associatedTokenProgram: associatedTokenProgramId,
       rent: web3.SYSVAR_RENT_PUBKEY,
     })

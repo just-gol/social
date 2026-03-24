@@ -837,10 +837,10 @@ export default function App() {
               appState.tweets.map((tweet) => {
                 const isOwn = tweet.author === connectedAddress;
                 const canLike = !!viewer?.profile && !isOwn && !tweet.deleted && !tweet.viewerLike;
-                const canClaim =
+                const canClaimAsAuthor =
                   !!viewer?.profile &&
-                  !!tweet.viewerLike &&
-                  !tweet.viewerLike.rewardClaimed &&
+                  isOwn &&
+                  !!tweet.claimableAuthorLike &&
                   !tweet.deleted &&
                   !!viewer?.tokenMintInitialized;
                 return (
@@ -880,25 +880,58 @@ export default function App() {
                           : " Author reward still claimable."}
                       </div>
                     ) : null}
+                    {isOwn && tweet.claimableAuthorLike ? (
+                      <div className="banner">
+                        This tweet has an unclaimed like reward ready for the author to settle.
+                      </div>
+                    ) : null}
                     {!isOwn && !tweet.deleted && !viewer?.profile ? (
                       <div className="banner warn">先创建 Profile，才能点赞或领取奖励。</div>
+                    ) : null}
+                    {isOwn && !tweet.deleted && !viewer?.tokenMintInitialized ? (
+                      <div className="banner warn">当前链上还没有 Token Mint，作者奖励无法结算。</div>
                     ) : null}
                     {!isOwn && !tweet.deleted && !viewer?.tokenMintInitialized ? (
                       <div className="banner warn">当前链上还没有 Token Mint，点赞奖励无法结算。</div>
                     ) : null}
                     <div className="actions">
                       {isOwn ? (
-                        <button
-                          className="btn ghost"
-                          disabled={!txReady || !!busyAction || tweet.deleted}
-                          onClick={() =>
-                            void runAction("Delete Tweet", async () =>
-                              deleteTweetTx(getWritableProvider(), tweet.address)
-                            )
-                          }
-                        >
-                          Delete Tweet
-                        </button>
+                        <>
+                          <button
+                            className="btn ghost"
+                            disabled={!txReady || !!busyAction || tweet.deleted}
+                            onClick={() =>
+                              void runAction("Delete Tweet", async () =>
+                                deleteTweetTx(getWritableProvider(), tweet.address)
+                              )
+                            }
+                          >
+                            Delete Tweet
+                          </button>
+                          <button
+                            className="btn secondary"
+                            disabled={!txReady || !!busyAction || !canClaimAsAuthor}
+                            onClick={() =>
+                              void runGuardedAction(
+                                "Send Reward to Author",
+                                writeModeGuard("结算作者奖励")
+                                  ? writeModeGuard("结算作者奖励")
+                                  : !viewer?.profile
+                                    ? "先创建 Profile。"
+                                    : tweet.deleted
+                                      ? "tweet 已删除，不能继续结算奖励。"
+                                      : !tweet.claimableAuthorLike
+                                        ? "这条 tweet 当前没有待结算的点赞奖励。"
+                                        : !viewer?.tokenMintInitialized
+                                          ? "先创建全局 Token Mint。"
+                                          : null,
+                                async () => mintLikeRewardTx(getWritableProvider(), tweet)
+                              )
+                            }
+                          >
+                            Send Reward to Author
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button
@@ -923,31 +956,6 @@ export default function App() {
                             }
                           >
                             Like Tweet
-                          </button>
-                          <button
-                            className="btn secondary"
-                            disabled={!txReady || !!busyAction || !canClaim}
-                            onClick={() =>
-                              void runGuardedAction(
-                                "Send Reward to Author",
-                                writeModeGuard("领取奖励")
-                                  ? writeModeGuard("领取奖励")
-                                  : !viewer?.profile
-                                    ? "先创建 Profile。"
-                                    : tweet.deleted
-                                      ? "tweet 已删除，不能继续领奖。"
-                                      : !tweet.viewerLike
-                                        ? "要先对这条 tweet 点赞，才能领取对应奖励。"
-                                        : tweet.viewerLike.rewardClaimed
-                                          ? "这次 like 的奖励已经领过了。"
-                                          : !viewer?.tokenMintInitialized
-                                            ? "先创建全局 Token Mint。"
-                                            : null,
-                                async () => mintLikeRewardTx(getWritableProvider(), tweet)
-                              )
-                            }
-                          >
-                            Send Reward to Author
                           </button>
                         </>
                       )}

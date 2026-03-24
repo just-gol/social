@@ -141,6 +141,7 @@ pub struct CreateTokenMint<'info> {
       mint::decimals = 2,
       mint::authority = token_mint_account,
       mint::freeze_authority = token_mint_account,
+      mint::token_program = token_program,
     )]
     pub token_mint_account: InterfaceAccount<'info, Mint>,
     /// CHECK: PDA is derived with token-metadata program + mint seeds, so address validity is enforced by seeds constraints.

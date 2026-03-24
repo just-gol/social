@@ -60,28 +60,23 @@ pub struct MintLikeReward<'info> {
         ],
         bump
     )]
-    pub profile: Account<'info, Profile>,
+    pub author_profile: Account<'info, Profile>,
 
     #[account(
         mut,
         seeds = [
             Like::LIKE_PREFIX,
             tweet.key().as_ref(),
-            profile.key().as_ref(),
+            liker_profile.key().as_ref(),
         ],
         bump
     )]
     pub like: Account<'info, Like>,
 
     #[account(
-        mut,
-        seeds = [
-            Profile::PROFILE_PREFIX,
-            author.key().as_ref(),
-        ],
-        bump
+        address = like.profile_pda
     )]
-    pub author_profile: Account<'info, Profile>,
+    pub liker_profile: Account<'info, Profile>,
 
     #[account(
         mut,
@@ -101,14 +96,10 @@ pub struct MintLikeReward<'info> {
         init_if_needed,
         payer = authority,
         associated_token::mint = token_mint_account,
-        associated_token::authority = author,
+        associated_token::authority = authority,
         associated_token::token_program = token_program,
     )]
-    pub author_token_account: InterfaceAccount<'info, TokenAccount>,
-
-    /// CHECK: constrained by `address = tweet.author`.
-    #[account(address = tweet.author)]
-    pub author: UncheckedAccount<'info>,
+    pub authority_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -120,21 +111,16 @@ pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
     require!(!ctx.accounts.tweet.deleted, SocialError::TweetDeleted);
     require!(!like.reward_claimed, SocialError::RewardAlreadyClaimed);
     require!(
-        like.profile_pda == ctx.accounts.profile.key(),
+        ctx.accounts.tweet.author == ctx.accounts.authority.key(),
+        SocialError::InvalidTweetAuthor
+    );
+    require!(
+        like.profile_pda == ctx.accounts.liker_profile.key(),
         SocialError::InvalidProfilePda
     );
     require!(
         like.tweet_pda == ctx.accounts.tweet.key(),
         SocialError::InvalidTweetPda
-    );
-    require!(
-        ctx.accounts.author_profile.key()
-            == Pubkey::find_program_address(
-                &[Profile::PROFILE_PREFIX, ctx.accounts.author.key().as_ref()],
-                ctx.program_id
-            )
-            .0,
-        SocialError::InvalidAuthorProfile
     );
     require!(
         ctx.accounts.author_profile.tweet_count
@@ -143,7 +129,7 @@ pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
     );
 
     let current_day = Clock::get()?.unix_timestamp.div_euclid(86_400);
-    ctx.accounts.profile.register_like_reward(
+    ctx.accounts.author_profile.register_like_reward(
         current_day,
         ctx.accounts.reward_config.daily_like_reward_cap,
     )?;
@@ -157,7 +143,7 @@ pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
             ctx.accounts.token_program.to_account_info(),
             MintTo {
                 mint: ctx.accounts.token_mint_account.to_account_info(),
-                to: ctx.accounts.author_token_account.to_account_info(),
+                to: ctx.accounts.authority_token_account.to_account_info(),
                 authority: ctx.accounts.token_mint_account.to_account_info(),
             },
             &[&[
@@ -172,7 +158,7 @@ pub fn mint_like_reward(ctx: Context<MintLikeReward>) -> Result<()> {
         .add_token_rewards(ctx.accounts.reward_config.like_reward_amount)?;
 
     emit!(RewardIssued {
-        recipient: ctx.accounts.author.key(),
+        recipient: ctx.accounts.authority.key(),
         reference: ctx.accounts.like.key(),
         reward_kind: RewardKind::LikeToken,
         amount: ctx.accounts.reward_config.like_reward_amount,
