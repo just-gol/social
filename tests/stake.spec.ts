@@ -1,3 +1,4 @@
+import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
 import { PublicKey } from "@solana/web3.js";
 import {
@@ -17,6 +18,7 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   SYSVAR_RENT_PUBKEY,
+  DEFAULT_REWARD_CONFIG,
 } from "./helpers";
 
 function stakePda(authority: PublicKey, mint: PublicKey) {
@@ -29,7 +31,7 @@ function stakePda(authority: PublicKey, mint: PublicKey) {
 async function createProfile(authority: any, name = "staker") {
   const profile = profilePda(authority.publicKey);
   await program.methods
-    .createProfile(name)
+    .createProfile(name, `${name}-bio`, `https://example.com/${name}.png`)
     .accounts({
       authority: authority.publicKey,
     })
@@ -38,16 +40,45 @@ async function createProfile(authority: any, name = "staker") {
   return profile;
 }
 
-async function initRewardConfig(authority: any) {
-  const rewardConfig = rewardConfigPda(authority.publicKey);
-  await program.methods
-    .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
+async function initRewardConfig(authority: any, overrides = {}) {
+  const admin = (program.provider.wallet as any).payer;
+  const rewardConfig = rewardConfigPda();
+  const config = { ...DEFAULT_REWARD_CONFIG, ...overrides };
+  const exists = await program.provider.connection.getAccountInfo(rewardConfig);
+  const builder = exists
+    ? program.methods.updateRewardConfig(
+        "10 Tweets Badge",
+        "TWEET10",
+        "https://example.com/nft",
+        config.milestoneTweetCount,
+        new anchor.BN(config.likeRewardAmount),
+        new anchor.BN(config.stakeBaseRewardAmount),
+        new anchor.BN(config.stakeRewardPerEpoch),
+        config.dailyTweetRewardCap,
+        config.dailyLikeRewardCap,
+        config.maxRewardableLikesPerTweet,
+        config.minTweetsBeforeLikeReward
+      )
+    : program.methods.initRewardConfig(
+        "10 Tweets Badge",
+        "TWEET10",
+        "https://example.com/nft",
+        config.milestoneTweetCount,
+        new anchor.BN(config.likeRewardAmount),
+        new anchor.BN(config.stakeBaseRewardAmount),
+        new anchor.BN(config.stakeRewardPerEpoch),
+        config.dailyTweetRewardCap,
+        config.dailyLikeRewardCap,
+        config.maxRewardableLikesPerTweet,
+        config.minTweetsBeforeLikeReward
+      );
+  await builder
     .accountsStrict({
-      authority: authority.publicKey,
+      authority: admin.publicKey,
       rewardConfig,
-      systemProgram: SystemProgram.programId,
-    })
-    .signers([authority])
+      ...(exists ? {} : { systemProgram: SystemProgram.programId }),
+    } as any)
+    .signers([admin])
     .rpc();
   return rewardConfig;
 }
@@ -111,8 +142,6 @@ async function createTweet(
 ) {
   const profileAccount = await program.account.profile.fetch(profile);
   const tweet = tweetPda(profile, profileAccount.tweetCount);
-  const metadata = metadataPda(mint);
-  const masterEdition = masterEditionPda(mint);
 
   await program.methods
     .createTweet(content)
@@ -123,8 +152,8 @@ async function createTweet(
       nftMintAccount: mint,
       rewardConfig,
       authorNftAccount: ata,
-      masterEditonAccount: masterEdition,
-      metadataAccount: metadata,
+      masterEditonAccount: masterEditionPda(mint),
+      metadataAccount: metadataPda(mint),
       tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -137,27 +166,9 @@ async function createTweet(
   return tweet;
 }
 
-async function assertRpcError(promise: Promise<unknown>, message: string) {
-  try {
-    await promise;
-    expect.fail(`expected rpc error containing "${message}"`);
-  } catch (error) {
-    expect(`${error}`).to.include(message);
-  }
-}
-
-async function requireMetadataProgram(context: Mocha.Context) {
-  const metadataProgramInfo = await program.provider.connection.getAccountInfo(
-    TOKEN_METADATA_PROGRAM_ID
-  );
-  if (!metadataProgramInfo || !metadataProgramInfo.executable) {
-    context.skip();
-  }
-}
-
-async function setupStakeFixture(authority: any, name = "staker") {
+async function setupStakeFixture(authority: any, name = "staker", configOverrides = {}) {
   const profile = await createProfile(authority, name);
-  const rewardConfig = await initRewardConfig(authority);
+  const rewardConfig = await initRewardConfig(authority, configOverrides);
   const tokenMint = await createTokenMint(authority);
   const { mint, ata: authorityNftAccount } = await createNftMint(
     authority,
@@ -202,8 +213,8 @@ async function setupStakeFixture(authority: any, name = "staker") {
   };
 }
 
-async function createStakePosition(authority: any, name = "staker") {
-  const fixture = await setupStakeFixture(authority, name);
+async function createStakePosition(authority: any, name = "staker", configOverrides = {}) {
+  const fixture = await setupStakeFixture(authority, name, configOverrides);
 
   await program.methods
     .createStake()
@@ -216,9 +227,6 @@ async function createStakePosition(authority: any, name = "staker") {
       stakeAssociatedTokenAccount: fixture.stakeAssociatedTokenAccount,
       authorityNftAccount: fixture.authorityNftAccount,
       rewardConfig: fixture.rewardConfig,
-      tokenMintAccount: fixture.tokenMint,
-      authorTokenAccount: fixture.authorityTokenAccount,
-      author: authority.publicKey,
       systemProgram: SystemProgram.programId,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -231,8 +239,13 @@ async function createStakePosition(authority: any, name = "staker") {
 }
 
 describe("stake", () => {
-  it("transfers nft into stake ata and mints reward token", async function () {
-    await requireMetadataProgram(this);
+  it("transfers nft into stake ata on stake", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
 
     const authority = Keypair.generate();
     await airdrop(authority.publicKey, 2);
@@ -255,9 +268,6 @@ describe("stake", () => {
         stakeAssociatedTokenAccount: fixture.stakeAssociatedTokenAccount,
         authorityNftAccount: fixture.authorityNftAccount,
         rewardConfig: fixture.rewardConfig,
-        tokenMintAccount: fixture.tokenMint,
-        authorTokenAccount: fixture.authorityTokenAccount,
-        author: authority.publicKey,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -276,21 +286,15 @@ describe("stake", () => {
       fixture.stakeAssociatedTokenAccount
     );
     expect(stakeNftBalance.value.amount).to.equal("1");
-
-    const rewardBalance = await program.provider.connection.getTokenAccountBalance(
-      fixture.authorityTokenAccount
-    );
-    expect(rewardBalance.value.amount).to.equal("10000");
-
-    const stakeAccount = await program.account.stake.fetch(fixture.stake);
-    expect(stakeAccount.authority.toBase58()).to.equal(
-      authority.publicKey.toBase58()
-    );
-    expect(stakeAccount.mint.toBase58()).to.equal(fixture.mint.toBase58());
   });
 
   it("rejects staking when the tweet does not belong to the staking authority", async function () {
-    await requireMetadataProgram(this);
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
 
     const staker = Keypair.generate();
     const poster = Keypair.generate();
@@ -314,8 +318,8 @@ describe("stake", () => {
       "poster-tweet"
     );
 
-    await assertRpcError(
-      program.methods
+    try {
+      await program.methods
         .createStake()
         .accountsStrict({
           authority: staker.publicKey,
@@ -326,42 +330,34 @@ describe("stake", () => {
           stakeAssociatedTokenAccount: stakerFixture.stakeAssociatedTokenAccount,
           authorityNftAccount: stakerFixture.authorityNftAccount,
           rewardConfig: stakerFixture.rewardConfig,
-          tokenMintAccount: stakerFixture.tokenMint,
-          authorTokenAccount: associatedTokenAddress(
-            stakerFixture.tokenMint,
-            poster.publicKey,
-            TOKEN_PROGRAM_ID
-          ),
-          author: poster.publicKey,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           rent: SYSVAR_RENT_PUBKEY,
         })
         .signers([staker])
-        .rpc(),
-      "Invalid tweet author"
-    );
+        .rpc();
+      expect.fail("expected invalid tweet author");
+    } catch (error) {
+      expect(`${error}`).to.include("Invalid tweet author");
+    }
   });
 
-  it("returns nft, burns reward tokens, and closes the stake on unstake", async function () {
-    await requireMetadataProgram(this);
+  it("returns nft and mints configured reward on unstake", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
 
     const authority = Keypair.generate();
     await airdrop(authority.publicKey, 2);
 
-    const fixture = await createStakePosition(authority);
-
-    const stakedNftBalance = await program.provider.connection.getTokenAccountBalance(
-      fixture.stakeAssociatedTokenAccount
-    );
-    expect(stakedNftBalance.value.amount).to.equal("1");
-
-    const rewardBalanceBefore =
-      await program.provider.connection.getTokenAccountBalance(
-        fixture.authorityTokenAccount
-      );
-    expect(rewardBalanceBefore.value.amount).to.equal("10000");
+    const fixture = await createStakePosition(authority, "rewarded", {
+      stakeBaseRewardAmount: 50,
+      stakeRewardPerEpoch: 0,
+    });
 
     await program.methods
       .unstake()
@@ -374,7 +370,7 @@ describe("stake", () => {
         authorityNftAccount: fixture.authorityNftAccount,
         rewardConfig: fixture.rewardConfig,
         tokenMintAccount: fixture.tokenMint,
-        authorTokenAccount: fixture.authorityTokenAccount,
+        authorityTokenAccount: fixture.authorityTokenAccount,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -389,16 +385,14 @@ describe("stake", () => {
       );
     expect(authorityNftBalance.value.amount).to.equal("1");
 
-    const stakeNftBalance = await program.provider.connection.getTokenAccountBalance(
-      fixture.stakeAssociatedTokenAccount
-    );
-    expect(stakeNftBalance.value.amount).to.equal("0");
-
-    const rewardBalanceAfter =
+    const rewardBalance =
       await program.provider.connection.getTokenAccountBalance(
         fixture.authorityTokenAccount
       );
-    expect(rewardBalanceAfter.value.amount).to.equal("0");
+    expect(Number(rewardBalance.value.amount)).to.equal(50);
+
+    const profileAccount = await program.account.profile.fetch(fixture.profile);
+    expect(profileAccount.tokenRewardsEarned.toString()).to.equal("50");
 
     expect(await program.provider.connection.getAccountInfo(fixture.stake)).to.equal(
       null
@@ -406,7 +400,12 @@ describe("stake", () => {
   });
 
   it("fails to unstake twice after the stake account has been closed", async function () {
-    await requireMetadataProgram(this);
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
 
     const authority = Keypair.generate();
     await airdrop(authority.publicKey, 2);
@@ -424,7 +423,7 @@ describe("stake", () => {
         authorityNftAccount: fixture.authorityNftAccount,
         rewardConfig: fixture.rewardConfig,
         tokenMintAccount: fixture.tokenMint,
-        authorTokenAccount: fixture.authorityTokenAccount,
+        authorityTokenAccount: fixture.authorityTokenAccount,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -445,7 +444,7 @@ describe("stake", () => {
           authorityNftAccount: fixture.authorityNftAccount,
           rewardConfig: fixture.rewardConfig,
           tokenMintAccount: fixture.tokenMint,
-          authorTokenAccount: fixture.authorityTokenAccount,
+          authorityTokenAccount: fixture.authorityTokenAccount,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,

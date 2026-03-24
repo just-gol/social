@@ -2,15 +2,14 @@ import { expect } from "chai";
 import { program, Keypair, airdrop, profilePda } from "./helpers";
 
 describe("profile", () => {
-  it("creates profile and stores name", async () => {
+  it("creates profile and stores display fields", async () => {
     const authority = Keypair.generate();
     await airdrop(authority.publicKey);
 
     const profile = profilePda(authority.publicKey);
-    const name = "alice";
 
     await program.methods
-      .createProfile(name)
+      .createProfile("alice", "builder", "https://example.com/a.png")
       .accounts({
         authority: authority.publicKey,
       })
@@ -18,17 +17,19 @@ describe("profile", () => {
       .rpc();
 
     const account = await program.account.profile.fetch(profile);
-    expect(account.name).to.equal(name);
+    expect(account.name).to.equal("alice");
+    expect(account.bio).to.equal("builder");
+    expect(account.avatarUri).to.equal("https://example.com/a.png");
+    expect(account.tweetCount).to.equal(0);
+    expect(account.tokenRewardsEarned.toString()).to.equal("0");
   });
 
   it("fails to create profile twice for same authority", async () => {
     const authority = Keypair.generate();
     await airdrop(authority.publicKey);
 
-    const profile = profilePda(authority.publicKey);
-
     await program.methods
-      .createProfile("first")
+      .createProfile("first", "", "")
       .accounts({
         authority: authority.publicKey,
       })
@@ -37,7 +38,7 @@ describe("profile", () => {
 
     try {
       await program.methods
-        .createProfile("second")
+        .createProfile("second", "", "")
         .accounts({
           authority: authority.publicKey,
         })
@@ -49,22 +50,19 @@ describe("profile", () => {
     }
   });
 
-  it("fails when name exceeds 32 bytes", async () => {
+  it("fails when bio exceeds allocated bytes", async () => {
     const authority = Keypair.generate();
     await airdrop(authority.publicKey);
 
-    const profile = profilePda(authority.publicKey);
-    const tooLong = "a".repeat(40);
-
     try {
       await program.methods
-        .createProfile(tooLong)
+        .createProfile("user", "b".repeat(200), "")
         .accounts({
           authority: authority.publicKey,
         })
         .signers([authority])
         .rpc();
-      expect.fail("expected long name to fail");
+      expect.fail("expected long bio to fail");
     } catch (err) {
       expect(err).to.exist;
     }

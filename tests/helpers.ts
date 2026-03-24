@@ -17,6 +17,16 @@ export const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 );
 export const SYSVAR_RENT_PUBKEY = web3.SYSVAR_RENT_PUBKEY;
+export const DEFAULT_REWARD_CONFIG = {
+  milestoneTweetCount: 10,
+  likeRewardAmount: 100,
+  stakeBaseRewardAmount: 0,
+  stakeRewardPerEpoch: 200,
+  dailyTweetRewardCap: 10,
+  dailyLikeRewardCap: 10,
+  maxRewardableLikesPerTweet: 5,
+  minTweetsBeforeLikeReward: 1,
+} as const;
 
 export async function airdrop(pubkey: web3.PublicKey, sol = 1) {
   const sig = await provider.connection.requestAirdrop(
@@ -53,9 +63,9 @@ export function likePda(tweet: web3.PublicKey, profile: web3.PublicKey) {
   )[0];
 }
 
-export function rewardConfigPda(authority: web3.PublicKey) {
+export function rewardConfigPda() {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("reward_config"), authority.toBuffer()],
+    [Buffer.from("reward_config")],
     program.programId
   )[0];
 }
@@ -109,4 +119,17 @@ export function associatedTokenAddress(
     [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()],
     ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
+}
+
+export async function warpToNextEpoch() {
+  const startEpoch = (await provider.connection.getEpochInfo()).epoch;
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const current = await provider.connection.getEpochInfo();
+    if (current.epoch > startEpoch) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error("epoch did not advance in time");
 }

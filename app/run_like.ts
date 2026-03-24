@@ -1,4 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
+import { BN } from "@coral-xyz/anchor";
 import { program, programId, rpcUrl, wallet } from "./anchor_env";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -18,13 +19,40 @@ import {
   tweetPda,
 } from "./pda";
 
+async function ensureProfile(user: anchor.web3.Keypair, name: string) {
+  const profile = profilePda(user.publicKey);
+  const info = await program.provider.connection.getAccountInfo(profile);
+  if (!info) {
+    const sig = await program.provider.connection.requestAirdrop(
+      user.publicKey,
+      anchor.web3.LAMPORTS_PER_SOL
+    );
+    await program.provider.connection.confirmTransaction(sig, "confirmed");
+    await program.methods
+      .createProfile(name, `${name}-bio`, `https://example.com/${name}.png`)
+      .accounts({ authority: user.publicKey })
+      .signers([user])
+      .rpc();
+  }
+  return profile;
+}
+
 async function main() {
   console.log("rpc_url", rpcUrl);
   console.log("program_id", programId.toBase58());
-  console.log("authority", wallet.publicKey.toBase58());
+  console.log("author", wallet.publicKey.toBase58());
 
-  const profile = profilePda(wallet.publicKey);
-  const rewardConfig = rewardConfigPda(wallet.publicKey);
+  const liker = anchor.web3.Keypair.generate();
+  const likerAirdrop = await program.provider.connection.requestAirdrop(
+    liker.publicKey,
+    anchor.web3.LAMPORTS_PER_SOL
+  );
+  await program.provider.connection.confirmTransaction(likerAirdrop, "confirmed");
+
+  const profile = await ensureProfile(wallet, "author");
+  const likerProfile = await ensureProfile(liker, "liker");
+
+  const rewardConfig = rewardConfigPda();
   const nftMint = nftMintPda(rewardConfig, profile);
   const nftAta = associatedTokenAddress(nftMint, wallet.publicKey);
   const nftMetadata = metadataPda(nftMint);
@@ -32,21 +60,23 @@ async function main() {
   const tokenMint = tokenMintPda();
   const tokenMetadata = metadataPda(tokenMint);
 
-  const profileInfo = await program.provider.connection.getAccountInfo(profile);
-  if (!profileInfo) {
-    const tx = await program.methods
-      .createProfile("app_user")
-      .accounts({ authority: wallet.publicKey })
-      .signers([wallet])
-      .rpc();
-    console.log("create_profile_tx", tx);
-  }
-
   const rewardConfigInfo =
     await program.provider.connection.getAccountInfo(rewardConfig);
   if (!rewardConfigInfo) {
     const tx = await program.methods
-      .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
+      .initRewardConfig(
+        "10 Tweets Badge",
+        "TWEET10",
+        "https://example.com/nft",
+        10,
+        new BN(100),
+        new BN(0),
+        new BN(200),
+        10,
+        10,
+        5,
+        1
+      )
       .accountsStrict({
         authority: wallet.publicKey,
         rewardConfig,
@@ -98,8 +128,8 @@ async function main() {
     console.log("create_token_mint_tx", tx);
   }
 
-  const profileAccount = await program.account.profile.fetch(profile);
-  const tweet = tweetPda(profile, profileAccount.tweetCount);
+  const authorProfileAccount = await program.account.profile.fetch(profile);
+  const tweet = tweetPda(profile, authorProfileAccount.tweetCount);
   const tweetInfo = await program.provider.connection.getAccountInfo(tweet);
   if (!tweetInfo) {
     const tx = await program.methods
@@ -124,19 +154,19 @@ async function main() {
     console.log("create_tweet_tx", tx);
   }
 
-  const like = likePda(tweet, profile);
+  const like = likePda(tweet, likerProfile);
   const likeInfo = await program.provider.connection.getAccountInfo(like);
   if (!likeInfo) {
     const tx = await program.methods
       .createLike()
       .accountsStrict({
-        authority: wallet.publicKey,
+        authority: liker.publicKey,
         tweet,
-        profile,
+        profile: likerProfile,
         like,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
-      .signers([wallet])
+      .signers([liker])
       .rpc();
     console.log("create_like_tx", tx);
   }
@@ -145,10 +175,12 @@ async function main() {
   const rewardTx = await program.methods
     .mintLikeReward()
     .accountsStrict({
-      authority: wallet.publicKey,
+      authority: liker.publicKey,
       tweet,
-      profile,
+      profile: likerProfile,
       like,
+      authorProfile: profile,
+      rewardConfig,
       tokenMintAccount: tokenMint,
       authorTokenAccount,
       author: wallet.publicKey,
@@ -156,7 +188,7 @@ async function main() {
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
-    .signers([wallet])
+    .signers([liker])
     .rpc();
 
   console.log("mint_like_reward_tx", rewardTx);

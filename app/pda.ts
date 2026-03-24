@@ -33,9 +33,9 @@ export function likePda(tweet: PublicKey, profile: PublicKey) {
   )[0];
 }
 
-export function rewardConfigPda(authority: PublicKey) {
+export function rewardConfigPda() {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("reward_config"), authority.toBuffer()],
+    [Buffer.from("reward_config")],
     program.programId
   )[0];
 }

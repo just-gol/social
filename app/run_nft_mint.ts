@@ -1,4 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
+import { BN } from "@coral-xyz/anchor";
 import { program, programId, rpcUrl, wallet } from "./anchor_env";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -17,7 +18,7 @@ import {
 
 async function main() {
   const profile = profilePda(wallet.publicKey);
-  const rewardConfig = rewardConfigPda(wallet.publicKey);
+  const rewardConfig = rewardConfigPda();
   const mint = nftMintPda(rewardConfig, profile);
   const ata = associatedTokenAddress(mint, wallet.publicKey);
   const metadata = metadataPda(mint);
@@ -34,7 +35,7 @@ async function main() {
   const profileInfo = await program.provider.connection.getAccountInfo(profile);
   if (!profileInfo) {
     const tx = await program.methods
-      .createProfile("app_user")
+      .createProfile("app_user", "profile for demo", "https://example.com/avatar.png")
       .accounts({ authority: wallet.publicKey })
       .signers([wallet])
       .rpc();
@@ -45,7 +46,19 @@ async function main() {
     await program.provider.connection.getAccountInfo(rewardConfig);
   if (!rewardConfigInfo) {
     const tx = await program.methods
-      .initRewardConfig("10 Tweets Badge", "TWEET10", "https://example.com/nft")
+      .initRewardConfig(
+        "10 Tweets Badge",
+        "TWEET10",
+        "https://example.com/nft",
+        10,
+        new BN(100),
+        new BN(0),
+        new BN(200),
+        10,
+        10,
+        5,
+        1
+      )
       .accountsStrict({
         authority: wallet.publicKey,
         rewardConfig,
