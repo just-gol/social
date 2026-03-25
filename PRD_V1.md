@@ -2,17 +2,19 @@
 
 ## 1. 文档目标
 
-本文档定义 `social` 项目的 V1 产品需求。
+本文档定义 `social` 项目当前 V1 版本的产品需求与实现边界。
 
 V1 的目标不是做完整社交平台，而是完成一个可运行、可验证、可演示的链上社交激励闭环，覆盖：
 
 - 用户注册
 - 发帖
+- 软删除帖子
 - 点赞
 - 点赞奖励
 - 里程碑 NFT
 - NFT 质押 / 解质押
 - 全局奖励配置
+- 基础前端交互页面
 
 V1 不包含评论、关注、转发、通知、推荐、治理投票、复杂经济模型。
 
@@ -26,16 +28,18 @@ V1 不包含评论、关注、转发、通知、推荐、治理投票、复杂�
 
 1. 用户在链上创建自己的 Profile
 2. 用户发 Tweet，形成基础内容生产
-3. 用户获得互动后，系统根据配置发放奖励
-4. 达到发帖里程碑时，用户获得 NFT 徽章
-5. 用户可以将 NFT 质押，获得额外 Token 激励
+3. 其他用户点赞，形成互动
+4. 作者在满足条件时自行领取点赞奖励
+5. 达到发帖里程碑时，用户获得 NFT 徽章
+6. 用户可以将 NFT 质押，并在解质押时获得 Token 激励
 
 V1 更偏向于：
 
 - 社交行为上链
-- 运营参数可调
-- 基础刷奖励限制
+- 奖励参数可配置
+- 最小反作弊
 - 链下可索引
+- 前端可直接演示完整闭环
 
 ---
 
@@ -43,16 +47,19 @@ V1 更偏向于：
 
 ### 3.1 In Scope
 
-- Profile 创建与展示字段
+- Profile 创建与展示
 - Tweet 创建与软删除
 - Like 创建
-- 点赞奖励发放
-- 里程碑 NFT 发放
+- 作者自行领取点赞奖励
+- 里程碑 NFT mint 初始化与发放
 - NFT 质押 / 解质押
 - 全局 RewardConfig
+- 全局 Token Mint
 - 奖励与行为事件
 - 最小反作弊限制
-- 测试覆盖主要成功 / 失败路径
+- 前端 Tab 式功能页面
+- `localnet` 与 `devnet` 演示支持
+- 自动化测试覆盖主要成功 / 失败路径
 
 ### 3.2 Out of Scope
 
@@ -64,8 +71,9 @@ V1 更偏向于：
 - 社区治理
 - 多种 NFT 类型
 - 推荐系统
-- 完整链下索引服务实现
-- 前端产品化页面
+- 完整后端索引服务
+- 复杂权限体系
+- 完整运营后台
 
 ---
 
@@ -79,7 +87,8 @@ V1 更偏向于：
 - 发帖
 - 删除自己的帖子
 - 点赞别人的帖子
-- 获得 NFT 与 Token 奖励
+- 作为作者领取自己的点赞奖励
+- 初始化自己的里程碑 NFT mint
 - 质押与解质押自己的 NFT
 
 ### 4.2 平台管理员
@@ -88,6 +97,7 @@ V1 更偏向于：
 
 - 初始化全局 RewardConfig
 - 更新全局 RewardConfig
+- 初始化全局 Token Mint
 
 约束：
 
@@ -101,19 +111,23 @@ V1 更偏向于：
 ### 5.1 用户生命周期
 
 1. 用户创建 Profile
-2. 用户发 Tweet
-3. 当发帖数达到 milestone 时，获得 NFT
-4. 其他用户对 Tweet 点赞
-5. 满足条件时，作者获得点赞 Token 奖励
-6. 作者将 NFT 质押
-7. 解质押时获得质押奖励并取回 NFT
+2. 管理员初始化全局 RewardConfig
+3. 管理员初始化全局 Token Mint
+4. 用户初始化自己的 NFT Mint
+5. 用户发 Tweet
+6. 达到里程碑时，用户获得 NFT
+7. 其他用户对 Tweet 点赞
+8. 作者在满足条件时领取点赞奖励
+9. 作者将 NFT 质押
+10. 作者解质押并获得质押奖励，同时取回 NFT
 
 ### 5.2 V1 成功标准
 
-- 能完整跑通“注册 -> 发帖 -> 点赞 -> 奖励 -> 质押 -> 解质押”
+- 能完整跑通“注册 -> 发帖 -> 点赞 -> 作者领奖 -> 质押 -> 解质押”
 - 奖励规则不写死在逻辑里，而由全局 RewardConfig 控制
 - 关键刷奖励路径被基本限制
 - 行为和奖励可通过事件进行链下索引
+- 前端可直接操作主要流程
 - 主要业务有自动化测试
 
 ---
@@ -130,16 +144,20 @@ V1 更偏向于：
 
 字段要求：
 
-- `name`：展示名称
-- `bio`：个人简介
-- `avatar_uri`：头像地址
-- `tweet_count`：累计发帖数
-- `last_tweet_day`：最近发帖自然日
-- `daily_tweet_count`：当日发帖计数
-- `last_like_reward_day`：最近领取点赞奖励的自然日
-- `daily_like_reward_count`：当日已领取点赞奖励次数
-- `token_rewards_earned`：累计获得 Token 数量
-- `nft_rewards_earned`：累计获得 NFT 数量
+- `name`：展示名称，用户在前端看到的昵称
+- `bio`：个人简介，用户的自我介绍文本
+- `avatar_uri`：头像地址，用户头像图片的 URI
+- `tweet_count`：累计发帖数，用户历史发帖总数
+- `last_tweet_day`：最近发帖自然日，按天统计的最近发帖日期
+- `daily_tweet_count`：当日发帖计数，用户当天已发帖次数
+- `last_like_reward_day`：最近领取点赞奖励的自然日，作者最近一次领取点赞奖励的日期
+- `daily_like_reward_count`：当日已领取点赞奖励次数，作者当天已结算的点赞奖励次数
+- `token_rewards_earned`：累计获得 Token 数量，用户历史累计获得的平台 Token
+- `nft_rewards_earned`：累计获得 NFT 数量，用户历史累计获得的里程碑 NFT 数量
+
+说明：
+
+- `daily_like_reward_count` 记录的是作者侧已领取的点赞奖励次数
 
 ### 6.2 Tweet
 
@@ -149,18 +167,19 @@ V1 更偏向于：
 
 字段要求：
 
-- `content`：文本内容
-- `author`：作者钱包地址
-- `likes_count`：总点赞数
-- `rewardable_likes_count`：已计入奖励的点赞数
-- `created_at`：创建时间戳
-- `deleted`：软删除标记
+- `content`：文本内容，Tweet 的正文
+- `author`：作者钱包地址，发帖用户的钱包公钥
+- `likes_count`：总点赞数，这条 Tweet 收到的点赞总次数
+- `rewardable_likes_count`：已计入奖励的点赞数，已经被用于奖励结算的点赞次数
+- `created_at`：创建时间戳，Tweet 上链时的时间
+- `deleted`：软删除标记，标识该 Tweet 是否已被作者删除
 
 约束：
 
 - V1 仅支持纯文本 Tweet
 - 不支持编辑
-- 删除为软删除，不做物理删除
+- 链上为软删除
+- 前端默认不展示已删除 Tweet
 
 ### 6.3 Like
 
@@ -168,14 +187,14 @@ V1 更偏向于：
 
 - 表示一次点赞行为
 - 防止重复点赞
-- 防止重复领取奖励
+- 作为作者领取点赞奖励的结算凭证
 
 字段要求：
 
-- `profile_pda`
-- `tweet_pda`
-- `reward_claimed`
-- `created_at`
+- `profile_pda`：点赞人 Profile，对应发起点赞用户的 Profile 账户
+- `tweet_pda`：被点赞 Tweet，对应这条点赞关联的 Tweet 账户
+- `reward_claimed`：该条点赞是否已结算奖励，防止重复发放奖励
+- `created_at`：点赞时间，这次 Like 创建的时间戳
 
 ### 6.4 RewardConfig
 
@@ -186,18 +205,18 @@ V1 更偏向于：
 
 字段要求：
 
-- `authority`
-- `name`
-- `symbol`
-- `uri`
-- `milestone_tweet_count`
-- `like_reward_amount`
-- `stake_base_reward_amount`
-- `stake_reward_per_epoch`
-- `daily_tweet_reward_cap`
-- `daily_like_reward_cap`
-- `max_rewardable_likes_per_tweet`
-- `min_tweets_before_like_reward`
+- `authority`：配置管理员地址，唯一允许更新 RewardConfig 的钱包
+- `name`：NFT 名称，里程碑 NFT 的展示名称
+- `symbol`：NFT 符号，里程碑 NFT 的简称
+- `uri`：NFT 元数据地址，NFT metadata 对应的 URI
+- `milestone_tweet_count`：里程碑发帖数，达到该发帖数后可获得 NFT
+- `like_reward_amount`：点赞奖励数量，每次结算点赞奖励时发放的 Token 数量
+- `stake_base_reward_amount`：质押基础奖励，解质押时固定发放的基础 Token 数量
+- `stake_reward_per_epoch`：每 epoch 质押奖励，按 epoch 累计的额外质押奖励
+- `daily_tweet_reward_cap`：每日发帖上限，用户每天最多可计数的发帖次数
+- `daily_like_reward_cap`：每日点赞奖励上限，作者每天最多可领取的点赞奖励次数
+- `max_rewardable_likes_per_tweet`：单 Tweet 最大奖励点赞数，一条 Tweet 最多可结算奖励的点赞次数
+- `min_tweets_before_like_reward`：点赞奖励最低发帖门槛，作者至少发够多少条 Tweet 后才能领取点赞奖励
 
 设计要求：
 
@@ -212,9 +231,9 @@ V1 更偏向于：
 
 字段要求：
 
-- `authority`
-- `mint`
-- `at`
+- `authority`：质押人地址，发起质押的用户钱包
+- `mint`：质押 NFT 的 mint 地址，被锁定的 NFT 标识
+- `at`：质押开始 epoch，记录进入质押时的 epoch 编号
 
 语义：
 
@@ -224,362 +243,379 @@ V1 更偏向于：
 
 ## 7. 功能需求
 
-## 7.1 创建 Profile
+### 7.1 创建 Profile
 
-### 功能描述
+功能描述：
 
 用户可创建自己的链上 Profile。
 
-### 输入
+输入：
 
 - `name`
 - `bio`
 - `avatar_uri`
 
-### 规则
+规则：
 
 - 一个钱包只能创建一个 Profile
-- 名称、简介、头像地址需要满足长度限制
+- 字段需要满足长度限制
 
-### 结果
+结果：
 
 - 成功创建 Profile
 - 触发 `ProfileCreated` 事件
 
----
+### 7.2 创建 Tweet
 
-## 7.2 创建 Tweet
-
-### 功能描述
+功能描述：
 
 用户发布一条新的 Tweet。
 
-### 输入
+输入：
 
 - `content`
 
-### 规则
+前置条件：
 
-- 必须已存在 Profile
-- Tweet 内容长度受限
-- 需要检查用户当日发帖上限
-- Tweet 创建后记录时间戳
+- 已有 Profile
+- 已有全局 RewardConfig
+- 已初始化用户自己的 NFT Mint
 
-### 奖励规则
+规则：
 
-- 当 `tweet_count` 达到 `milestone_tweet_count` 时，触发里程碑 NFT 奖励
-- 该奖励通过全局 RewardConfig 决定
+- 内容长度受限
+- 受 `daily_tweet_reward_cap` 约束
+- 达到 `milestone_tweet_count` 时发放 NFT
 
-### 结果
+结果：
 
 - 成功创建 Tweet
-- `tweet_count` 增加
-- 可能铸造 NFT
-- 触发 `TweetCreated`
-- 若发 NFT，再触发 `RewardIssued`
+- 递增 `tweet_count`
+- 触发 `TweetCreated` 事件
 
----
+### 7.3 删除 Tweet
 
-## 7.3 删除 Tweet
+功能描述：
 
-### 功能描述
+作者可删除自己的 Tweet。
 
-作者可以删除自己的 Tweet。
+规则：
 
-### 规则
+- 仅作者本人可删除
+- 删除采用软删除
+- 软删除后不能继续点赞或领取奖励
+- 前端不再展示已删除 Tweet
 
-- 仅作者本人可以删除
-- 删除后仅设置 `deleted = true`
-- 已删除 Tweet 不可继续点赞或领取奖励
+结果：
 
-### 结果
+- `deleted = true`
+- 触发 `TweetDeleted` 事件
 
-- Tweet 被软删除
-- 触发 `TweetDeleted`
+### 7.4 创建 Like
 
----
+功能描述：
 
-## 7.4 创建 Like
+用户可以给别人的 Tweet 点赞。
 
-### 功能描述
+规则：
 
-用户可以给别人发布的 Tweet 点赞。
-
-### 规则
-
-- 同一用户对同一 Tweet 只能点赞一次
+- 一条 Tweet 对同一用户只能点赞一次
 - 禁止自赞
-- 已删除 Tweet 不允许点赞
+- 已删除 Tweet 不能点赞
 
-### 结果
+结果：
 
-- `likes_count` 增加
-- 创建 Like 记录
-- 触发 `LikeCreated`
+- 创建 Like 账户
+- 增加 `likes_count`
+- 触发 `LikeCreated` 事件
 
----
+### 7.5 作者领取点赞奖励
 
-## 7.5 点赞奖励发放
+功能描述：
 
-### 功能描述
+Tweet 作者对自己收到的点赞进行奖励结算。
 
-点赞行为可触发作者获得 Token 奖励。
+设计语义：
 
-### 规则
+- 点赞人只负责产生 `Like`
+- 作者自己发起 `mint_like_reward`
+- 奖励 mint 到作者自己的 Token ATA
 
-- 奖励不是在 `create_like` 时自动发放
-- 奖励通过单独的 `mint_like_reward` 发放
-- 同一 Like 只能发一次奖励
-- 作者必须满足最小发帖门槛：
-  - `author_profile.tweet_count >= min_tweets_before_like_reward`
-- 点赞领取方需要受每日奖励次数限制
-- 单条 Tweet 可计入奖励的点赞次数有上限
-- 已删除 Tweet 不允许继续发奖励
+前置条件：
 
-### 奖励金额
+- Tweet 未删除
+- 该 Like 尚未结算奖励
+- 调用者必须是 Tweet 作者
+- 作者发帖数达到 `min_tweets_before_like_reward`
+- 当日作者奖励次数未超过 `daily_like_reward_cap`
+- 当前 Tweet 已计奖点赞数未超过 `max_rewardable_likes_per_tweet`
+- 全局 Token Mint 已存在
 
-- 由 `like_reward_amount` 决定
+结果：
 
-### 结果
+- `like.reward_claimed = true`
+- Tweet 的 `rewardable_likes_count` 增加
+- 作者 `token_rewards_earned` 增加
+- 奖励 mint 到作者 ATA
+- 触发 `RewardIssued` 事件
 
-- 作者获得 Token
-- Like 标记为已领取奖励
-- 作者的 `token_rewards_earned` 增加
-- 触发 `RewardIssued`
+### 7.6 初始化 NFT Mint
 
----
+功能描述：
 
-## 7.6 里程碑 NFT
+用户初始化自己里程碑 NFT 对应的 mint 账户。
 
-### 功能描述
+说明：
 
-当用户发帖达到 milestone 时，获得一个 NFT 徽章。
+- 这是当前实现所需的准备步骤
+- V1 前端会显式暴露这个操作
+- 后续版本可考虑改为系统自动处理
 
-### 规则
+### 7.7 初始化 Token Mint
 
-- 里程碑由 `milestone_tweet_count` 控制
-- V1 只有一类 milestone NFT
-- 主要含义是创作者里程碑凭证
+功能描述：
 
-### 结果
+管理员初始化全局 Token Mint。
 
-- NFT mint 数量增加
-- 用户 ATA 收到 1 个 NFT
-- 用户 `nft_rewards_earned` 增加
-- 触发 `RewardIssued`
+规则：
 
----
+- 全局唯一
+- 只允许管理员操作
+- 作为点赞奖励和解质押奖励的 Token 基础设施
 
-## 7.7 创建 Token Mint / NFT Mint
+### 7.8 初始化 / 更新 RewardConfig
 
-### 功能描述
+功能描述：
 
-- 平台有一套全局 Token Mint
-- 每个用户配合 Profile 有对应的 NFT Mint
+管理员初始化或更新全局奖励参数。
 
-### 规则
+规则：
 
-- Token Mint 用于平台积分奖励
-- NFT Mint 用于里程碑 NFT
-- NFT 元数据由 RewardConfig 中的 `name / symbol / uri` 提供
+- 全局唯一
+- 只允许 `authority` 更新
 
----
+### 7.9 创建 Stake
 
-## 7.8 质押 NFT
+功能描述：
 
-### 功能描述
+用户将自己的里程碑 NFT 质押。
 
-用户可以质押自己的里程碑 NFT。
+前置条件：
 
-### 规则
+- 持有 NFT
+- 至少有一条有效 Tweet
+- 当前未处于质押状态
 
-- 仅允许质押用户自己的 NFT
-- 仅允许质押已存在且已 mint 的 NFT
-- 质押时需要记录开始 epoch
-- V1 一次只支持一个 stake 记录对应一个 NFT
+规则：
 
-### 结果
+- V1 仅支持单 NFT 质押
+- 创建 Stake 时不直接发放奖励
 
-- NFT 从用户账户转入 stake ATA
-- 创建 Stake 记录
-- 触发 `StakeCreated`
+结果：
 
----
+- NFT 转入 stake ATA
+- 创建 Stake 账户
+- 触发 `StakeCreated` 事件
 
-## 7.9 解质押 NFT
+### 7.10 Unstake
 
-### 功能描述
+功能描述：
 
-用户可将已质押 NFT 解质押，并获得质押奖励。
+用户解质押并领取质押奖励。
 
-### 奖励公式
+规则：
 
-```text
-reward_amount = stake_base_reward_amount + elapsed_epochs * stake_reward_per_epoch
-```
-
-### 规则
-
-- 仅质押人本人可以解质押
-- 质押记录与 NFT Mint 必须匹配
-- 解质押后关闭 Stake 账户
 - 奖励在解质押时统一结算
+- 奖励 = `stake_base_reward_amount + elapsed_epochs * stake_reward_per_epoch`
 
-### 结果
+结果：
 
-- NFT 返回用户账户
-- 用户收到质押 Token 奖励
-- 用户 `token_rewards_earned` 增加
+- NFT 返还给用户
+- 奖励 mint 到用户 ATA
 - Stake 账户关闭
-- 触发 `RewardIssued`
-- 触发 `StakeClosed`
+- 触发 `StakeClosed` / `RewardIssued` 事件
 
 ---
 
-## 8. 风控与反作弊需求
+## 8. 风控与限制
 
-V1 只做最小可用风控。
+### 8.1 最小反作弊
 
-### 8.1 点赞相关
+- 禁止自赞
+- 同一用户对同一 Tweet 只能点赞一次
+- 已删除 Tweet 不可点赞
+- 已删除 Tweet 不可继续领奖
+- 发帖受每日上限控制
+- 点赞奖励受每日上限控制
+- 单条 Tweet 的计奖点赞数受上限控制
+- 作者需达到最低发帖门槛后才可领取点赞奖励
 
-- 禁止自己给自己点赞
-- 同一用户不能重复点赞同一条 Tweet
-- 同一 Like 只能领取一次奖励
+### 8.2 不做的事情
 
-### 8.2 内容相关
-
-- 每日发帖数有上限
-- 已删除 Tweet 不参与点赞与奖励
-
-### 8.3 奖励相关
-
-- 每日点赞奖励领取次数有限制
-- 单条 Tweet 可计奖点赞数量有限制
-- 作者必须达到最小发帖数门槛，才允许发点赞奖励
-
-### 8.4 暂不处理
-
-- 多钱包女巫攻击
-- 链下风控模型
-- IP / 设备维度风控
-- 社交图谱作弊识别
+- 不做女巫攻击识别
+- 不做复杂链下风控模型
+- 不做信用分体系
 
 ---
 
-## 9. 配置策略
+## 9. 前端需求
 
-V1 使用全局唯一 RewardConfig。
+### 9.1 前端目标
 
-### 原则
+V1 前端应覆盖主要业务操作，而不是仅作为静态展示。
 
-- 平台统一规则
-- 普通用户不可自定义奖励参数
-- 平台管理员统一调参
+### 9.2 页面结构
 
-### 原因
+前端采用 Tab 式布局，至少包含：
 
-- 早期产品需要快速试错
-- 奖励参数本质是运营参数
-- 治理系统复杂度过高，不适合 V1
+- `Home`
+- `Base Camp`
+- `Profile`
+- `Tweets`
+- `Vault`
+- `Admin`
+
+### 9.3 页面职责
+
+`Home`
+
+- 展示产品介绍与主要入口
+
+`Base Camp`
+
+- 钱包连接
+- 浏览器钱包 / 本地只读 / 本地 keypair 调试模式切换
+- 展示全局 RewardConfig 与环境信息
+
+`Profile`
+
+- 创建 Profile
+- 查看个人资料与统计
+- 初始化 NFT Mint
+
+`Tweets`
+
+- 创建 Tweet
+- 查看 feed
+- 删除自己的 Tweet
+- 点赞他人 Tweet
+- 作者领取自己的点赞奖励
+
+`Vault`
+
+- 查看 NFT / Token 余额
+- 查看 stake 状态
+- 质押 / 解质押
+
+`Admin`
+
+- 初始化 / 更新 RewardConfig
+- 初始化 Token Mint
+
+### 9.4 使用模式
+
+`localnet`
+
+- 浏览器钱包默认只读
+- 推荐使用 Local Keypair 调试模式进行写操作
+
+`devnet`
+
+- 可配合浏览器钱包直接进行演示
 
 ---
 
-## 10. 事件与链下索引需求
+## 10. 链下索引需求
 
-V1 不强制实现完整索引服务，但必须保证链下有可索引数据源。
+V1 不强制实现完整索引服务，但需要提供可被链下使用的数据基础。
 
-### 必须具备的事件
+至少支持索引：
 
-- `ProfileCreated`
-- `TweetCreated`
-- `TweetDeleted`
-- `LikeCreated`
-- `RewardIssued`
-- `StakeCreated`
-- `StakeClosed`
+- Profile 创建
+- Tweet 创建
+- Tweet 删除
+- Like 创建
+- Reward 发放
+- Stake 创建
+- Stake 关闭
 
-### 链下至少需要支持查询
+链下至少需要能查询：
 
-- 用户资料
+- 用户 Profile
 - 用户 Tweet 列表
+- 全站最新 Tweet 列表
 - Tweet 点赞数
-- 奖励发放记录
+- 用户奖励状态
 - 用户 NFT 持有状态
-- 用户质押状态
-
-### V1 时间线范围
-
-- 个人主页时间线
-- 全站最新时间线
-
-不做：
-
-- 关注时间线
-- 推荐流
-- 热门排序
+- 用户 stake 状态
 
 ---
 
-## 11. 非功能要求
+## 11. 测试需求
 
-### 11.1 可测试性
+### 11.1 Profile
 
-需要覆盖：
+- 创建成功
+- 重复创建失败
+- 字段长度超限失败
 
-- Profile 创建成功 / 失败
-- Tweet 创建 / 软删除 / 发帖上限
-- 里程碑 NFT 发放
-- Like 创建 / 自赞失败 / 重复奖励失败
-- 点赞奖励上限
-- Stake / Unstake 闭环
+### 11.2 Tweet
 
-### 11.2 可维护性
+- 发帖成功并递增计数
+- 到达里程碑后发 NFT
+- 超过每日发帖上限失败
+- 删除后前端不再展示
 
-- 奖励参数必须从 RewardConfig 读取
-- 不允许继续在业务逻辑里写死奖励数字
+### 11.3 Like
 
-### 11.3 可扩展性
+- 点赞成功并增加 `likes_count`
+- 重复点赞失败
+- 自赞失败
+- 已删除 Tweet 不可点赞
 
-V1 设计应为后续能力预留空间：
+### 11.4 Reward
+
+- 作者成功领取点赞奖励
+- 重复领取失败
+- 单日奖励上限生效
+- 单 Tweet 奖励上限生效
+- 作者发帖门槛生效
+
+### 11.5 Stake
+
+- 质押成功
+- 解质押成功
+- 奖励按 epoch 正确结算
+- 重复解质押失败
+
+### 11.6 前端
+
+- 主要页面可完成业务闭环
+- local keypair 模式可在 localnet 提交交易
+- 错误提示能转成人话
+
+---
+
+## 12. 当前已知实现说明
+
+- RewardConfig 为全局唯一 PDA
+- Token Mint 为全局唯一 PDA
+- NFT Mint 仍采用“每个用户一份 mint”模型
+- 点赞奖励已经改成“作者自己领取”
+- 删除为链上软删除，前端默认过滤已删除 Tweet
+- 当前前端使用 `React + TypeScript + Vite`
+
+---
+
+## 13. 后续版本方向
+
+不属于当前 V1，但后续可以考虑：
 
 - 评论
-- 关注
-- 转发
-- 多级 NFT 体系
-- 治理化配置
-
----
-
-## 12. V1 验收标准
-
-满足以下条件即视为 V1 完成：
-
-1. 可创建 Profile，并正确保存展示字段
-2. 可创建 Tweet，并记录时间戳
-3. 可删除 Tweet，删除后不可继续点赞和领奖
-4. 达到配置里程碑时可发 NFT
-5. 可创建 Like，并拦截自赞
-6. 点赞奖励按配置发放
-7. 点赞奖励受到每日次数和单帖次数限制
-8. 作者未达到最小发帖门槛时，不可领取点赞奖励
-9. 可质押 NFT
-10. 可解质押并获得按配置计算的奖励
-11. 所有核心行为有事件可供链下索引
-12. 自动化测试通过
-
----
-
-## 13. V1 之后暂缓事项
-
-以下内容不进入本轮：
-
-- 评论系统
-- 关注系统
-- 转发系统
-- 推送通知
-- 推荐和排序
-- 多管理员和治理
-- 复杂 Token 经济模型
-- 完整链下索引服务实现
-- 前端产品化
-
+- 关注关系
+- 自动化 NFT mint 初始化
+- 作者奖励批量结算
+- 更完整的个人主页
+- 奖励流水页面
+- devnet 演示部署脚本
+- 更完善的链下索引
