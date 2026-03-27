@@ -11,4 +11,7 @@ pub use mint::*;
 pub mod stake;
 pub use stake::*;
 pub mod unstake;
+pub mod comment;
+pub use comment::*;
+
 pub use unstake::*;

@@ -27,6 +27,8 @@ pub struct Profile {
     pub token_rewards_earned: u64,
     /// 用户累计获得的里程碑 NFT 数量。
     pub nft_rewards_earned: u32,
+    /// 推文评论数
+    pub comments_count:u32,
 }
 
 impl Profile {
@@ -101,6 +103,7 @@ impl Profile {
             daily_like_reward_count: 0,
             token_rewards_earned: 0,
             nft_rewards_earned: 0,
+            comments_count:0,
         }
     }
 }

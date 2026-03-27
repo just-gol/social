@@ -17,6 +17,8 @@ pub struct Tweet {
     pub created_at: i64,
     /// 软删除标记，删除后内容仍保留但不可继续参与互动和奖励。
     pub deleted: bool,
+    /// 推文评论数
+    pub comments_count:u32,
 }
 
 impl Tweet {
@@ -31,6 +33,7 @@ impl Tweet {
             rewardable_likes_count: 0,
             created_at,
             deleted: false,
+            comments_count:0
         }
     }
 

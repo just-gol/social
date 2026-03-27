@@ -32,6 +32,8 @@ pub enum SocialError {
     TweetDeleted,
     #[msg("Tweet is already deleted")]
     TweetAlreadyDeleted,
+    #[msg("Comment is already deleted")]
+    CommentAlreadyDeleted,
     #[msg("Daily tweet cap exceeded")]
     DailyTweetCapExceeded,
     #[msg("Daily like reward cap exceeded")]
@@ -40,4 +42,8 @@ pub enum SocialError {
     TweetLikeRewardCapExceeded,
     #[msg("Author is not eligible for like rewards yet")]
     AuthorNotEligibleForLikeReward,
+    #[msg("Content too long")]
+    ContentTooLong,
+    #[msg("Not author")]
+    NotAuthor,
 }

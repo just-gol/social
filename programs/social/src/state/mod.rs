@@ -4,3 +4,5 @@ pub mod profile;
 pub mod reward_config;
 pub mod stake;
 pub mod tweet;
+pub mod comment;
+
