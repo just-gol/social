@@ -21,7 +21,9 @@ describe("profile", () => {
     expect(account.bio).to.equal("builder");
     expect(account.avatarUri).to.equal("https://example.com/a.png");
     expect(account.tweetCount).to.equal(0);
+    expect(account.commentsReceivedCount).to.equal(0);
     expect(account.tokenRewardsEarned.toString()).to.equal("0");
+    expect(account.nftRewardsEarned).to.equal(0);
   });
 
   it("fails to create profile twice for same authority", async () => {

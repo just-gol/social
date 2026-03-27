@@ -149,6 +149,7 @@ describe("tweet", () => {
       authority.publicKey.toBase58()
     );
     expect(tweetAccount.deleted).to.equal(false);
+    expect(tweetAccount.commentsCount).to.equal(0);
     expect(Number(tweetAccount.createdAt)).to.be.greaterThan(0);
   });
 
@@ -329,5 +330,6 @@ describe("tweet", () => {
 
     const tweetAccount = await program.account.tweet.fetch(tweet);
     expect(tweetAccount.deleted).to.equal(true);
+    expect(tweetAccount.commentsCount).to.equal(0);
   });
 });
