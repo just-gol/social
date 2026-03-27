@@ -63,6 +63,13 @@ export function likePda(tweet: web3.PublicKey, profile: web3.PublicKey) {
   )[0];
 }
 
+export function commentPda(tweet: web3.PublicKey, authority: web3.PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("comment"), tweet.toBuffer(), authority.toBuffer()],
+    program.programId
+  )[0];
+}
+
 export function rewardConfigPda() {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("reward_config")],

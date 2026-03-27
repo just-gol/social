@@ -53,15 +53,7 @@ pub struct DeleteComment<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(
-        mut,
-        seeds=[
-            Comment::COMMENT_PREFIX,
-            tweet.key().as_ref(),
-            authority.key().as_ref(),
-        ],
-        bump,
-    )]
+    #[account(mut)]
     pub comment: Account<'info, Comment>,
 
     #[account(mut)]
@@ -97,6 +89,7 @@ pub fn create_comment(ctx: Context<CreateComment>, content: String) -> Result<()
 
 pub fn delete_comment(ctx: Context<DeleteComment>) -> Result<()> {
     require!(!ctx.accounts.comment.deleted,SocialError::CommentAlreadyDeleted);
+    require!(ctx.accounts.comment.tweet_pda == ctx.accounts.tweet.key(), SocialError::InvalidTweetPda);
     require!(ctx.accounts.comment.author == ctx.accounts.authority.key(), SocialError::NotAuthor);
     ctx.accounts.comment.deleted = true;
     ctx.accounts.tweet.subtract_comment()?;
