@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 declare_id!("9BXzYsCbqFLwTzkqognW18JiZa7DrzhccsifMHSjcwxS");
 pub mod instructions;
-use instructions::*;
+pub use instructions::*;
 pub mod errors;
 pub mod events;
 pub mod state;
@@ -107,5 +107,12 @@ pub mod social {
 
     pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
         instructions::unstake(ctx)
+    }
+    pub fn create_comment(ctx:Context<CreateComment>,content:String)->Result<()>{
+        instructions::create_comment(ctx,content)
+    }
+
+    pub fn delete_comment(ctx:Context<DeleteComment>) ->Result<()>{
+        instructions::delete_comment(ctx)
     }
 }

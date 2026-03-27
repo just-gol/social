@@ -18,7 +18,7 @@ pub struct Tweet {
     /// 软删除标记，删除后内容仍保留但不可继续参与互动和奖励。
     pub deleted: bool,
     /// 推文评论数
-    pub comments_count:u32,
+    pub comments_count: u32,
 }
 
 impl Tweet {
@@ -33,7 +33,7 @@ impl Tweet {
             rewardable_likes_count: 0,
             created_at,
             deleted: false,
-            comments_count:0
+            comments_count: 0,
         }
     }
 
@@ -63,6 +63,22 @@ impl Tweet {
     pub fn delete(&mut self) -> Result<()> {
         require!(!self.deleted, SocialError::TweetAlreadyDeleted);
         self.deleted = true;
+        Ok(())
+    }
+
+    pub fn comment(&mut self) -> Result<()> {
+        self.comments_count = self
+            .comments_count
+            .checked_add(1)
+            .ok_or(SocialError::CommentsOverflow)?;
+        Ok(())
+    }
+
+    pub fn subtract_comment(&mut self) -> Result<()> {
+        self.comments_count = self
+            .comments_count
+            .checked_sub(1)
+            .ok_or(SocialError::CommentsUnderflow)?;
         Ok(())
     }
 }

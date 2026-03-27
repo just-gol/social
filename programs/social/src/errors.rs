@@ -46,4 +46,8 @@ pub enum SocialError {
     ContentTooLong,
     #[msg("Not author")]
     NotAuthor,
+    #[msg("Comments overflow")]
+    CommentsOverflow,
+    #[msg("Comments underflow")]
+    CommentsUnderflow,
 }

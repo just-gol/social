@@ -49,7 +49,7 @@ pub struct CreateComment<'info> {
 }
 
 #[derive(Accounts)]
-pub struct DeletedComment<'info> {
+pub struct DeleteComment<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -82,7 +82,7 @@ pub struct DeletedComment<'info> {
 
 
 pub fn create_comment(ctx: Context<CreateComment>, content: String) -> Result<()> {
-    require!(content.len() <= 65, SocialError::ContentTooLong);
+    require!(content.len() <= 64, SocialError::ContentTooLong);
     require!(!ctx.accounts.tweet.deleted,SocialError::TweetAlreadyDeleted);
     ctx.accounts.comment.set_inner(Comment::new(
         ctx.accounts.authority.key(),
@@ -90,17 +90,16 @@ pub fn create_comment(ctx: Context<CreateComment>, content: String) -> Result<()
         ctx.accounts.tweet.key(),
         ctx.accounts.author_profile.key(),
     ));
-    ctx.accounts.tweet.comments_count = ctx.accounts.tweet.comments_count.checked_add(1).unwrap();
-    ctx.accounts.tweet_profile.comments_count = ctx.accounts.tweet_profile.comments_count.checked_add(1).unwrap();
+    ctx.accounts.tweet.comment()?;
+    ctx.accounts.tweet_profile.comments_received_count()?;
     Ok(())
 }
 
-pub fn deleted_comment(ctx: Context<DeletedComment>)-> Result<()> {
-    require!(!ctx.accounts.tweet.deleted,SocialError::TweetAlreadyDeleted);
+pub fn delete_comment(ctx: Context<DeleteComment>) -> Result<()> {
     require!(!ctx.accounts.comment.deleted,SocialError::CommentAlreadyDeleted);
     require!(ctx.accounts.comment.author == ctx.accounts.authority.key(), SocialError::NotAuthor);
     ctx.accounts.comment.deleted = true;
-    ctx.accounts.tweet.comments_count = ctx.accounts.tweet.comments_count.checked_sub(1).unwrap();
-    ctx.accounts.tweet_profile.comments_count = ctx.accounts.tweet_profile.comments_count.checked_sub(1).unwrap();
+    ctx.accounts.tweet.subtract_comment()?;
+    ctx.accounts.tweet_profile.subtract_comments_received_count()?;
     Ok(())
 }
