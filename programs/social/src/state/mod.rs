@@ -5,4 +5,4 @@ pub mod reward_config;
 pub mod stake;
 pub mod tweet;
 pub mod comment;
-
+pub mod follow;

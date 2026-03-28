@@ -15,3 +15,6 @@ pub mod comment;
 pub use comment::*;
 
 pub use unstake::*;
+
+pub mod follow;
+pub use follow::*;

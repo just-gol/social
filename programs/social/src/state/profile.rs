@@ -28,7 +28,11 @@ pub struct Profile {
     /// 用户累计获得的里程碑 NFT 数量。
     pub nft_rewards_earned: u32,
     /// 推文评论数
-    pub comments_received_count:u32,
+    pub comments_received_count: u32,
+    /// 关注者的数量 A 关注了 B , followers_count = A , following_count = B
+    pub followers_count: u32,
+    /// 被关注者的数量
+    pub following_count: u32,
 }
 
 impl Profile {
@@ -103,18 +107,20 @@ impl Profile {
             daily_like_reward_count: 0,
             token_rewards_earned: 0,
             nft_rewards_earned: 0,
-            comments_received_count:0,
+            comments_received_count: 0,
+            followers_count: 0,
+            following_count: 0,
         }
     }
 
-    pub fn comments_received_count(&mut self)-> Result<()> {
+    pub fn comments_received_count(&mut self) -> Result<()> {
         self.comments_received_count = self
             .comments_received_count
             .checked_add(1)
             .ok_or(SocialError::CommentsOverflow)?;
         Ok(())
     }
-    pub fn subtract_comments_received_count(&mut self)-> Result<()> {
+    pub fn subtract_comments_received_count(&mut self) -> Result<()> {
         self.comments_received_count = self
             .comments_received_count
             .checked_sub(1)
