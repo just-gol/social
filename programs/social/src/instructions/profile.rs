@@ -33,7 +33,7 @@ pub fn create_profile(
 ) -> Result<()> {
     ctx.accounts
         .profile
-        .set_inner(Profile::new(name, bio, avatar_uri));
+        .set_inner(Profile::new(name, bio, avatar_uri, ctx.accounts.authority.key()));
     emit!(ProfileCreated {
         authority: ctx.accounts.authority.key(),
         profile: ctx.accounts.profile.key(),

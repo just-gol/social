@@ -1,3 +1,4 @@
+use crate::events::{CommentCreated, CommentDeleted};
 use crate::state::comment::Comment;
 use crate::state::profile::Profile;
 use crate::state::tweet::Tweet;
@@ -84,6 +85,13 @@ pub fn create_comment(ctx: Context<CreateComment>, content: String) -> Result<()
     ));
     ctx.accounts.tweet.comment()?;
     ctx.accounts.tweet_profile.comments_received_count()?;
+    emit!(CommentCreated {
+        authority: ctx.accounts.authority.key(),
+        author_profile: ctx.accounts.author_profile.key(),
+        tweet: ctx.accounts.tweet.key(),
+        comment: ctx.accounts.comment.key(),
+        created_at: ctx.accounts.comment.created_at,
+    });
     Ok(())
 }
 
@@ -93,6 +101,11 @@ pub fn delete_comment(ctx: Context<DeleteComment>) -> Result<()> {
     require!(ctx.accounts.comment.author == ctx.accounts.authority.key(), SocialError::NotAuthor);
     ctx.accounts.comment.deleted = true;
     ctx.accounts.tweet.subtract_comment()?;
-    ctx.accounts.tweet_profile.subtract_comments_received_count()?;
+    ctx.accounts.tweet_profile.cancel_comments_received_count()?;
+    emit!(CommentDeleted {
+        authority: ctx.accounts.authority.key(),
+        comment: ctx.accounts.comment.key(),
+        tweet: ctx.accounts.tweet.key(),
+    });
     Ok(())
 }

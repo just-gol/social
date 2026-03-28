@@ -7,6 +7,8 @@ pub struct Profile {
     /// 用户展示名称。
     #[max_len(32)]
     pub name: String,
+    /// 用户账户。
+    pub authority: Pubkey,
     /// 用户简介，用于个人主页展示。
     #[max_len(160)]
     pub bio: String,
@@ -29,9 +31,9 @@ pub struct Profile {
     pub nft_rewards_earned: u32,
     /// 推文评论数
     pub comments_received_count: u32,
-    /// 关注者的数量 A 关注了 B , followers_count = A , following_count = B
+    /// 关注这个用户的人数(粉丝数) A 关注了 B  A 的 following_count + 1 B 的 followers_count + 1
     pub followers_count: u32,
-    /// 被关注者的数量
+    /// 这个用户关注了多少人(关注数)
     pub following_count: u32,
 }
 
@@ -95,7 +97,7 @@ impl Profile {
     }
 
     /// 构造一个默认初始化的用户资料。
-    pub fn new(name: String, bio: String, avatar_uri: String) -> Self {
+    pub fn new(name: String, bio: String, avatar_uri: String,authority: Pubkey) -> Self {
         Profile {
             name,
             bio,
@@ -110,6 +112,7 @@ impl Profile {
             comments_received_count: 0,
             followers_count: 0,
             following_count: 0,
+            authority,
         }
     }
 
@@ -120,9 +123,39 @@ impl Profile {
             .ok_or(SocialError::CommentsOverflow)?;
         Ok(())
     }
-    pub fn subtract_comments_received_count(&mut self) -> Result<()> {
+    pub fn cancel_comments_received_count(&mut self) -> Result<()> {
         self.comments_received_count = self
             .comments_received_count
+            .checked_sub(1)
+            .ok_or(SocialError::CommentsUnderflow)?;
+        Ok(())
+    }
+
+    pub fn followers_count(&mut self) -> Result<()> {
+        self.followers_count = self
+            .followers_count
+            .checked_add(1)
+            .ok_or(SocialError::CommentsOverflow)?;
+        Ok(())
+    }
+    pub fn cancel_followers_count(&mut self) -> Result<()> {
+        self.followers_count = self
+            .followers_count
+            .checked_sub(1)
+            .ok_or(SocialError::CommentsUnderflow)?;
+        Ok(())
+    }
+
+    pub fn following_count(&mut self) -> Result<()> {
+        self.following_count = self
+            .following_count
+            .checked_add(1)
+            .ok_or(SocialError::CommentsOverflow)?;
+        Ok(())
+    }
+    pub fn cancel_following_count(&mut self) -> Result<()> {
+        self.following_count = self
+            .following_count
             .checked_sub(1)
             .ok_or(SocialError::CommentsUnderflow)?;
         Ok(())

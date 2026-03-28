@@ -115,4 +115,11 @@ pub mod social {
     pub fn delete_comment(ctx:Context<DeleteComment>) ->Result<()>{
         instructions::delete_comment(ctx)
     }
+    pub fn create_follow(ctx:Context<CreateFollow>)->Result<()>{
+        instructions::create_follow(ctx)
+    }
+
+    pub fn cancel_follow(ctx:Context<CancelFollow>) ->Result<()>{
+        instructions::cancel_follow(ctx)
+    }
 }

@@ -87,3 +87,53 @@ pub struct StakeClosed {
     /// 本次质押持续的 epoch 数。
     pub elapsed_epochs: u64,
 }
+
+#[event]
+pub struct CommentCreated {
+    /// 发起评论的用户地址。
+    pub authority: Pubkey,
+    /// 评论作者对应的 Profile PDA。
+    pub author_profile: Pubkey,
+    /// 被评论的 Tweet PDA。
+    pub tweet: Pubkey,
+    /// 新建的 Comment PDA。
+    pub comment: Pubkey,
+    /// 评论创建时间戳。
+    pub created_at: i64,
+}
+
+#[event]
+pub struct CommentDeleted {
+    /// 删除评论的用户地址。
+    pub authority: Pubkey,
+    /// 被软删除的 Comment PDA。
+    pub comment: Pubkey,
+    /// 评论所属的 Tweet PDA。
+    pub tweet: Pubkey,
+}
+
+#[event]
+pub struct FollowCreated {
+    /// 发起关注的用户地址。
+    pub authority: Pubkey,
+    /// 新建的 Follow PDA。
+    pub follow: Pubkey,
+    /// 关注者对应的 Profile PDA。
+    pub follower_profile: Pubkey,
+    /// 被关注者对应的 Profile PDA。
+    pub following_profile: Pubkey,
+    /// 关注创建时间戳。
+    pub created_at: i64,
+}
+
+#[event]
+pub struct FollowCanceled {
+    /// 发起取关的用户地址。
+    pub authority: Pubkey,
+    /// 被关闭的 Follow PDA。
+    pub follow: Pubkey,
+    /// 关注者对应的 Profile PDA。
+    pub follower_profile: Pubkey,
+    /// 被关注者对应的 Profile PDA。
+    pub following_profile: Pubkey,
+}

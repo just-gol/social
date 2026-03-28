@@ -70,6 +70,16 @@ export function commentPda(tweet: web3.PublicKey, authority: web3.PublicKey) {
   )[0];
 }
 
+export function followPda(
+  authority: web3.PublicKey,
+  followingProfile: web3.PublicKey
+) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("follow"), authority.toBuffer(), followingProfile.toBuffer()],
+    program.programId
+  )[0];
+}
+
 export function rewardConfigPda() {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("reward_config")],

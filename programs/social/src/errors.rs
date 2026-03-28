@@ -50,4 +50,6 @@ pub enum SocialError {
     CommentsOverflow,
     #[msg("Comments underflow")]
     CommentsUnderflow,
+    #[msg("Invalid follow")]
+    InvalidFollow,
 }
