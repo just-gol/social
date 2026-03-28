@@ -93,6 +93,6 @@ pub fn delete_comment(ctx: Context<DeleteComment>) -> Result<()> {
     require!(ctx.accounts.comment.author == ctx.accounts.authority.key(), SocialError::NotAuthor);
     ctx.accounts.comment.deleted = true;
     ctx.accounts.tweet.subtract_comment()?;
-    ctx.accounts.tweet_profile.subtract_comments_received_count()?;
+    ctx.accounts.tweet_profile.cancel_comments_received_count()?;
     Ok(())
 }
