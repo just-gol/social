@@ -1,4 +1,3 @@
-use crate::events::{CommentCreated, CommentDeleted};
 use crate::state::comment::Comment;
 use crate::state::profile::Profile;
 use crate::state::tweet::Tweet;
