@@ -86,6 +86,8 @@ type RawComment = {
 };
 
 type RawFollow = {
+  follower?: PublicKey;
+  following?: PublicKey;
   follower_profile_pda?: PublicKey;
   followerProfilePda?: PublicKey;
   following_profile_pda?: PublicKey;
@@ -196,9 +198,19 @@ export type CommentView = {
 
 export type FollowView = {
   address: string;
+  follower: string;
+  following: string;
   followerProfileAddress: string;
   followingProfileAddress: string;
   createdAt: number;
+};
+
+export type SocialProfileLink = {
+  authority: string;
+  profileAddress: string;
+  name: string;
+  avatarUri: string;
+  bio: string;
 };
 
 export type LikeView = {
@@ -254,6 +266,8 @@ export type ViewerState = {
   stake: StakeView | null;
   ownTweets: TweetView[];
   following: FollowView[];
+  followerProfiles: SocialProfileLink[];
+  followingProfiles: SocialProfileLink[];
 };
 
 export type AppState = {
@@ -544,6 +558,8 @@ export async function loadAppState(
     const raw = entry.account as unknown as RawFollow;
     return {
       address: entry.publicKey.toBase58(),
+      follower: raw.follower!.toBase58(),
+      following: raw.following!.toBase58(),
       followerProfileAddress: (
         raw.follower_profile_pda ?? raw.followerProfilePda
       )!.toBase58(),
@@ -553,6 +569,31 @@ export async function loadAppState(
       createdAt: toNumber(raw.created_at ?? raw.createdAt ?? 0),
     } satisfies FollowView;
   });
+
+  const followProfileAddresses = Array.from(
+    new Set(
+      followViews.flatMap((follow) => [
+        follow.followerProfileAddress,
+        follow.followingProfileAddress,
+      ])
+    )
+  ).map((value) => new PublicKey(value));
+
+  const followProfiles = await Promise.all(
+    followProfileAddresses.map(async (address) => {
+      const raw = await fetchDecodedAccount<RawProfile>(connection, "profile", address);
+      if (!raw) return null;
+      const authority = raw.authority ?? web3.PublicKey.default;
+      return mapProfile(address, authority, raw);
+    })
+  );
+  const followProfileMap = new Map<string, ProfileView>();
+  followProfiles.forEach((profile) => {
+    if (profile) {
+      followProfileMap.set(profile.address, profile);
+    }
+  });
+
   const viewerFollowByProfile = new Map<string, FollowView>();
   if (viewerProfile) {
     for (const follow of followViews) {
@@ -628,6 +669,54 @@ export async function loadAppState(
     ? tweets.filter((tweet) => tweet.author === viewerKey.toBase58())
     : [];
 
+  const followerProfiles =
+    viewerProfile
+      ? followViews
+          .filter((follow) => follow.followingProfileAddress === viewerProfile.address)
+          .map((follow) => {
+            const profile = followProfileMap.get(follow.followerProfileAddress);
+            return profile
+              ? {
+                  authority: profile.authority,
+                  profileAddress: profile.address,
+                  name: profile.name,
+                  avatarUri: profile.avatarUri,
+                  bio: profile.bio,
+                }
+              : {
+                  authority: follow.follower,
+                  profileAddress: follow.followerProfileAddress,
+                  name: follow.follower.slice(0, 6),
+                  avatarUri: "",
+                  bio: "",
+                };
+          })
+      : [];
+
+  const followingProfiles =
+    viewerProfile
+      ? followViews
+          .filter((follow) => follow.followerProfileAddress === viewerProfile.address)
+          .map((follow) => {
+            const profile = followProfileMap.get(follow.followingProfileAddress);
+            return profile
+              ? {
+                  authority: profile.authority,
+                  profileAddress: profile.address,
+                  name: profile.name,
+                  avatarUri: profile.avatarUri,
+                  bio: profile.bio,
+                }
+              : {
+                  authority: follow.following,
+                  profileAddress: follow.followingProfileAddress,
+                  name: follow.following.slice(0, 6),
+                  avatarUri: "",
+                  bio: "",
+                };
+          })
+      : [];
+
   return {
     environment,
     rewardConfig,
@@ -651,6 +740,8 @@ export async function loadAppState(
             (follow) => follow.followerProfileAddress === viewerProfile.address
           )
         : [],
+      followerProfiles,
+      followingProfiles,
     },
   };
 }

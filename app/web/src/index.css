@@ -136,6 +136,62 @@ button {
   display: block;
 }
 
+.profile-trigger {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+}
+
+.stat-box-button {
+  border: 0;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 27, 42, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.overlay-panel {
+  width: min(720px, 100%);
+  max-height: min(80vh, 760px);
+  overflow: auto;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 28px;
+  box-shadow: var(--shadow-lg);
+}
+
+.overlay-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.overlay-head h2 {
+  margin: 10px 0 0;
+  font-family: var(--display);
+  font-size: 38px;
+  line-height: 1;
+}
+
+.overlay-list {
+  display: grid;
+  gap: 14px;
+}
+
 .brand-lockup strong {
   font-family: var(--display);
   font-size: 20px;

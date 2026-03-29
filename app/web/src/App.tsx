@@ -30,6 +30,7 @@ import {
   type AppState,
   type ProfileFormInput,
   type RewardConfigFormInput,
+  type SocialProfileLink,
   updateRewardConfigTx,
   unstakeTx,
 } from "./lib/socialClient";
@@ -126,6 +127,7 @@ function commentGuard(
 }
 
 type AppTab = "home" | "base" | "profile" | "tweets" | "vault" | "admin";
+type SocialListMode = "followers" | "following" | null;
 const LOCAL_KEYPAIR_SECRET_STORAGE_KEY = "social-local-keypair-secret";
 const WALLET_MODE_STORAGE_KEY = "social-wallet-mode";
 
@@ -152,6 +154,7 @@ export default function App() {
   const [rewardConfigForm, setRewardConfigForm] = useState<RewardConfigFormInput>({
     ...DEFAULT_REWARD_CONFIG_FORM,
   });
+  const [socialListMode, setSocialListMode] = useState<SocialListMode>(null);
   const environment = appState?.environment ?? {
     rpcUrl: DEFAULT_RPC_URL,
     rewardConfigPda: "",
@@ -347,6 +350,13 @@ export default function App() {
     void refreshState();
   }, [mode, connectedAddress]);
 
+  useEffect(() => {
+    if (activeTab === "home") {
+      return;
+    }
+    void refreshState();
+  }, [activeTab]);
+
   function getWritableProvider(): AnchorProvider {
     if (mode === "local-keypair") {
       if (!localKeypair) throw new Error("Load a local keypair first.");
@@ -453,6 +463,13 @@ export default function App() {
     window.localStorage.removeItem(LOCAL_KEYPAIR_SECRET_STORAGE_KEY);
     setNotice("Local keypair cleared.");
   }
+
+  const socialListEntries: SocialProfileLink[] =
+    socialListMode === "followers"
+      ? viewer?.followerProfiles ?? []
+      : socialListMode === "following"
+        ? viewer?.followingProfiles ?? []
+        : [];
 
   return (
     <main className="app-shell">
@@ -650,27 +667,39 @@ export default function App() {
 
           {viewer?.profile ? (
             <div className="stack">
-              <div className="profile-card">
+              <button
+                className="profile-card profile-trigger"
+                type="button"
+                onClick={() => setSocialListMode("followers")}
+              >
                 <Avatar name={viewer.profile.name} uri={viewer.profile.avatarUri} />
                 <div className="profile-copy">
                   <strong>{viewer.profile.name}</strong>
                   <span className="muted">{viewer.profile.bio || "No bio yet."}</span>
                   <span className="code">{viewer.profile.authority}</span>
                 </div>
-              </div>
+              </button>
               <div className="stats-row">
                 <div className="stat-box">
                   <span>Tweets</span>
                   <strong>{viewer.profile.tweetCount}</strong>
                 </div>
-                <div className="stat-box">
+                <button
+                  type="button"
+                  className="stat-box stat-box-button"
+                  onClick={() => setSocialListMode("followers")}
+                >
                   <span>Followers</span>
                   <strong>{viewer.profile.followersCount}</strong>
-                </div>
-                <div className="stat-box">
+                </button>
+                <button
+                  type="button"
+                  className="stat-box stat-box-button"
+                  onClick={() => setSocialListMode("following")}
+                >
                   <span>Following</span>
                   <strong>{viewer.profile.followingCount}</strong>
-                </div>
+                </button>
                 <div className="stat-box">
                   <span>Comments Received</span>
                   <strong>{viewer.profile.commentsReceivedCount}</strong>
@@ -682,12 +711,6 @@ export default function App() {
                 <div className="stat-box">
                   <span>NFT Rewards</span>
                   <strong>{viewer.profile.nftRewardsEarned}</strong>
-                </div>
-              </div>
-              <div className="kv">
-                <div className="kv-row">
-                  <span className="kv-key">Following relations</span>
-                  <span className="kv-value">{viewer.following.length}</span>
                 </div>
               </div>
               <div className="actions">
@@ -1399,6 +1422,78 @@ export default function App() {
         </section>
       </section>
         </>
+      ) : null}
+
+      {socialListMode ? (
+        <div className="overlay" onClick={() => setSocialListMode(null)}>
+          <section
+            className="overlay-panel"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="overlay-head">
+              <div>
+                <span className="eyebrow">
+                  {socialListMode === "followers" ? "Followers" : "Following"}
+                </span>
+                <h2>
+                  {socialListMode === "followers"
+                    ? "People following you"
+                    : "People you follow"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setSocialListMode(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="overlay-list">
+              {socialListEntries.length ? (
+                socialListEntries.map((entry) => (
+                  <article className="profile-card compact" key={entry.profileAddress}>
+                    <Avatar name={entry.name} uri={entry.avatarUri} />
+                    <div className="profile-copy">
+                      <strong>{entry.name}</strong>
+                      <span className="muted">{entry.bio || "No bio yet."}</span>
+                      <span className="code">{shortAddress(entry.authority, 6, 6)}</span>
+                    </div>
+                    {socialListMode === "following" ? (
+                      <div className="actions actions-inline">
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          disabled={!txReady || !!busyAction}
+                          onClick={() =>
+                            void runGuardedAction(
+                              "Cancel Follow",
+                              writeModeGuard("取关"),
+                              async () =>
+                                cancelFollowTx(
+                                  getWritableProvider(),
+                                  entry.profileAddress,
+                                  entry.authority
+                                )
+                            )
+                          }
+                        >
+                          Unfollow
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                ))
+              ) : (
+                <div className="empty-state">
+                  {socialListMode === "followers"
+                    ? "No followers yet."
+                    : "You are not following anyone yet."}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       ) : null}
     </main>
   );

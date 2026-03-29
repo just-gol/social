@@ -102,6 +102,8 @@ pub fn create_follow(ctx: Context<CreateFollow>) -> Result<()> {
     ctx.accounts.follow.set_inner(Follow::new(
         ctx.accounts.follower_profile.key(),
         ctx.accounts.following_profile.key(),
+        ctx.accounts.authority.key(),
+        ctx.accounts.following.key(),
     ));
     emit!(FollowCreated {
         authority: ctx.accounts.authority.key(),
