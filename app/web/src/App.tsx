@@ -11,7 +11,10 @@ import {
 } from "./lib/constants";
 import {
   airdropSol,
+  cancelFollowTx,
+  createCommentTx,
   createConnection,
+  createFollowTx,
   createLikeTx,
   createNftMintTx,
   createProfileTx,
@@ -19,8 +22,10 @@ import {
   createTokenMintTx,
   createTweetTx,
   deleteTweetTx,
+  deleteCommentTx,
   initRewardConfigTx,
   loadAppState,
+  type CommentView,
   mintLikeRewardTx,
   type AppState,
   type ProfileFormInput,
@@ -104,6 +109,22 @@ function GuardMessage({ text }: { text: string | null }) {
   return <div className="banner warn">{text}</div>;
 }
 
+function commentGuard(
+  baseGuard: string | null,
+  viewerProfileExists: boolean,
+  isOwnTweet: boolean,
+  tweetDeleted: boolean,
+  draft: string
+) {
+  if (baseGuard) return baseGuard;
+  if (!viewerProfileExists) return "先创建 Profile，才能评论。";
+  if (tweetDeleted) return "这条 tweet 已删除，不能继续评论。";
+  if (!draft.trim()) return "先输入评论内容。";
+  if (draft.trim().length > 64) return "评论内容不能超过 64 个字符。";
+  if (isOwnTweet) return null;
+  return null;
+}
+
 type AppTab = "home" | "base" | "profile" | "tweets" | "vault" | "admin";
 const LOCAL_KEYPAIR_SECRET_STORAGE_KEY = "social-local-keypair-secret";
 const WALLET_MODE_STORAGE_KEY = "social-wallet-mode";
@@ -127,6 +148,7 @@ export default function App() {
     avatarUri: "",
   });
   const [tweetContent, setTweetContent] = useState("");
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [rewardConfigForm, setRewardConfigForm] = useState<RewardConfigFormInput>({
     ...DEFAULT_REWARD_CONFIG_FORM,
   });
@@ -642,12 +664,30 @@ export default function App() {
                   <strong>{viewer.profile.tweetCount}</strong>
                 </div>
                 <div className="stat-box">
+                  <span>Followers</span>
+                  <strong>{viewer.profile.followersCount}</strong>
+                </div>
+                <div className="stat-box">
+                  <span>Following</span>
+                  <strong>{viewer.profile.followingCount}</strong>
+                </div>
+                <div className="stat-box">
+                  <span>Comments Received</span>
+                  <strong>{viewer.profile.commentsReceivedCount}</strong>
+                </div>
+                <div className="stat-box">
                   <span>Token Rewards</span>
                   <strong>{viewer.profile.tokenRewardsEarned}</strong>
                 </div>
                 <div className="stat-box">
                   <span>NFT Rewards</span>
                   <strong>{viewer.profile.nftRewardsEarned}</strong>
+                </div>
+              </div>
+              <div className="kv">
+                <div className="kv-row">
+                  <span className="kv-key">Following relations</span>
+                  <span className="kv-value">{viewer.following.length}</span>
                 </div>
               </div>
               <div className="actions">
@@ -837,6 +877,17 @@ export default function App() {
               appState.tweets.map((tweet) => {
                 const isOwn = tweet.author === connectedAddress;
                 const canLike = !!viewer?.profile && !isOwn && !tweet.deleted && !tweet.viewerLike;
+                const canFollow = !!viewer?.profile && !isOwn && !tweet.viewerFollow;
+                const canUnfollow = !!viewer?.profile && !isOwn && !!tweet.viewerFollow;
+                const commentText = commentDrafts[tweet.address] ?? "";
+                const createCommentGuard =
+                  commentGuard(
+                    writeModeGuard("评论"),
+                    !!viewer?.profile,
+                    isOwn,
+                    tweet.deleted,
+                    commentText
+                  );
                 const canClaimAsAuthor =
                   !!viewer?.profile &&
                   isOwn &&
@@ -853,9 +904,47 @@ export default function App() {
                           <span className="muted">{shortAddress(tweet.author, 5, 5)}</span>
                         </div>
                       </div>
-                      <span className={`tag ${tweet.deleted ? "danger" : ""}`}>
-                        {tweet.deleted ? "Deleted" : "Live"}
-                      </span>
+                      <div className="actions actions-inline">
+                        {!isOwn ? (
+                          <button
+                            className={`btn ${tweet.viewerFollow ? "ghost" : "secondary"}`}
+                            disabled={
+                              !txReady || !!busyAction || (!canFollow && !canUnfollow)
+                            }
+                            onClick={() =>
+                              void runGuardedAction(
+                                tweet.viewerFollow ? "Cancel Follow" : "Create Follow",
+                                writeModeGuard(tweet.viewerFollow ? "取关" : "关注")
+                                  ? writeModeGuard(tweet.viewerFollow ? "取关" : "关注")
+                                  : !viewer?.profile
+                                    ? "先创建 Profile。"
+                                    : tweet.viewerFollow
+                                      ? null
+                                      : canFollow
+                                        ? null
+                                        : "当前已经关注了这位作者。",
+                                async () =>
+                                  tweet.viewerFollow
+                                    ? cancelFollowTx(
+                                        getWritableProvider(),
+                                        tweet.authorProfileAddress,
+                                        tweet.author
+                                      )
+                                    : createFollowTx(
+                                        getWritableProvider(),
+                                        tweet.authorProfileAddress,
+                                        tweet.author
+                                      )
+                              )
+                            }
+                          >
+                            {tweet.viewerFollow ? "Following" : "Follow"}
+                          </button>
+                        ) : null}
+                        <span className={`tag ${tweet.deleted ? "danger" : ""}`}>
+                          {tweet.deleted ? "Deleted" : "Live"}
+                        </span>
+                      </div>
                     </div>
                     <p className="tweet-content">{tweet.content}</p>
                     <div className="stats-row">
@@ -866,6 +955,10 @@ export default function App() {
                       <div className="stat-box">
                         <span>Rewardable</span>
                         <strong>{tweet.rewardableLikesCount}</strong>
+                      </div>
+                      <div className="stat-box">
+                        <span>Comments</span>
+                        <strong>{tweet.commentsCount}</strong>
                       </div>
                       <div className="stat-box">
                         <span>Created</span>
@@ -960,6 +1053,102 @@ export default function App() {
                         </>
                       )}
                     </div>
+
+                    <section className="tweet-comments">
+                      <div className="tweet-comments-head">
+                        <strong>Comments</strong>
+                        <span className="muted">{tweet.comments.length} visible</span>
+                      </div>
+                      <div className="comment-list">
+                        {tweet.comments.length ? (
+                          tweet.comments.map((comment: CommentView) => {
+                            const isOwnComment = comment.author === connectedAddress;
+                            return (
+                              <article className="comment-card" key={comment.address}>
+                                <div className="profile-card compact">
+                                  <Avatar
+                                    name={comment.authorName}
+                                    uri={comment.authorAvatarUri}
+                                  />
+                                  <div className="profile-copy">
+                                    <strong>{comment.authorName}</strong>
+                                    <span className="muted">
+                                      {formatTimestamp(comment.createdAt)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="tweet-content">{comment.content}</p>
+                                {isOwnComment ? (
+                                  <div className="actions">
+                                    <button
+                                      className="btn ghost"
+                                      disabled={!txReady || !!busyAction}
+                                      onClick={() =>
+                                        void runGuardedAction(
+                                          "Delete Comment",
+                                          writeModeGuard("删除评论"),
+                                          async () =>
+                                            deleteCommentTx(
+                                              getWritableProvider(),
+                                              tweet,
+                                              comment
+                                            )
+                                        )
+                                      }
+                                    >
+                                      Delete Comment
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </article>
+                            );
+                          })
+                        ) : (
+                          <div className="empty-state compact">No comments yet.</div>
+                        )}
+                      </div>
+                      <label className="field full">
+                        <span>Leave a comment</span>
+                        <textarea
+                          className="textarea"
+                          value={commentText}
+                          onChange={(event) =>
+                            setCommentDrafts((current) => ({
+                              ...current,
+                              [tweet.address]: event.target.value,
+                            }))
+                          }
+                          placeholder="Say something about this tweet..."
+                        />
+                      </label>
+                      <div className="actions">
+                        <button
+                          className="btn primary"
+                          disabled={!!busyAction || !!createCommentGuard}
+                          onClick={() =>
+                            void runGuardedAction(
+                              "Create Comment",
+                              createCommentGuard,
+                              async () => {
+                                const sig = await createCommentTx(
+                                  getWritableProvider(),
+                                  tweet,
+                                  commentText
+                                );
+                                setCommentDrafts((current) => ({
+                                  ...current,
+                                  [tweet.address]: "",
+                                }));
+                                return sig;
+                              }
+                            )
+                          }
+                        >
+                          Comment
+                        </button>
+                      </div>
+                      <GuardMessage text={createCommentGuard} />
+                    </section>
                   </article>
                 );
               })

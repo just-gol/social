@@ -43,6 +43,20 @@ export function likePda(tweet: PublicKey, profile: PublicKey) {
   )[0];
 }
 
+export function commentPda(tweet: PublicKey, authority: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("comment"), tweet.toBuffer(), authority.toBuffer()],
+    programId
+  )[0];
+}
+
+export function followPda(authority: PublicKey, followingProfile: PublicKey) {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("follow"), authority.toBuffer(), followingProfile.toBuffer()],
+    programId
+  )[0];
+}
+
 export function nftMintPda(rewardConfig: PublicKey, profile: PublicKey) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("nft_mint"), rewardConfig.toBuffer(), profile.toBuffer()],

@@ -11,6 +11,8 @@ import {
 } from "./constants";
 import {
   associatedTokenAddress,
+  commentPda,
+  followPda,
   likePda,
   masterEditionPda,
   metadataPda,
@@ -30,6 +32,7 @@ const tokenMetadataProgramId = new PublicKey(TOKEN_METADATA_PROGRAM_ID);
 type ToStringable = { toString(): string };
 
 type RawProfile = {
+  authority?: PublicKey;
   name: string;
   bio: string;
   avatar_uri?: string;
@@ -48,6 +51,12 @@ type RawProfile = {
   tokenRewardsEarned?: ToStringable;
   nft_rewards_earned?: number;
   nftRewardsEarned?: number;
+  comments_received_count?: number;
+  commentsReceivedCount?: number;
+  followers_count?: number;
+  followersCount?: number;
+  following_count?: number;
+  followingCount?: number;
 };
 
 type RawTweet = {
@@ -57,9 +66,32 @@ type RawTweet = {
   likesCount?: number;
   rewardable_likes_count?: number;
   rewardableLikesCount?: number;
+  comments_count?: number;
+  commentsCount?: number;
   created_at?: ToStringable | number;
   createdAt?: ToStringable | number;
   deleted: boolean;
+};
+
+type RawComment = {
+  author: PublicKey;
+  content: string;
+  tweet_pda?: PublicKey;
+  tweetPda?: PublicKey;
+  author_profile_pda?: PublicKey;
+  authorProfilePda?: PublicKey;
+  created_at?: ToStringable | number;
+  createdAt?: ToStringable | number;
+  deleted: boolean;
+};
+
+type RawFollow = {
+  follower_profile_pda?: PublicKey;
+  followerProfilePda?: PublicKey;
+  following_profile_pda?: PublicKey;
+  followingProfilePda?: PublicKey;
+  created_at?: ToStringable | number;
+  createdAt?: ToStringable | number;
 };
 
 type RawLike = {
@@ -143,8 +175,30 @@ export type ProfileView = {
   dailyLikeRewardCount: number;
   tokenRewardsEarned: string;
   nftRewardsEarned: number;
+  commentsReceivedCount: number;
+  followersCount: number;
+  followingCount: number;
   lastTweetDay: string;
   lastLikeRewardDay: string;
+};
+
+export type CommentView = {
+  address: string;
+  author: string;
+  authorProfileAddress: string;
+  authorName: string;
+  authorAvatarUri: string;
+  tweetAddress: string;
+  content: string;
+  createdAt: number;
+  deleted: boolean;
+};
+
+export type FollowView = {
+  address: string;
+  followerProfileAddress: string;
+  followingProfileAddress: string;
+  createdAt: number;
 };
 
 export type LikeView = {
@@ -164,10 +218,13 @@ export type TweetView = {
   authorAvatarUri: string;
   likesCount: number;
   rewardableLikesCount: number;
+  commentsCount: number;
   createdAt: number;
   deleted: boolean;
+  comments: CommentView[];
   viewerLike: LikeView | null;
   claimableAuthorLike: LikeView | null;
+  viewerFollow: FollowView | null;
 };
 
 export type StakeView = {
@@ -196,6 +253,7 @@ export type ViewerState = {
   tokenBalance: string;
   stake: StakeView | null;
   ownTweets: TweetView[];
+  following: FollowView[];
 };
 
 export type AppState = {
@@ -234,7 +292,8 @@ function formatDayCounter(day: number) {
   return Number.isNaN(date.getTime()) ? String(day) : date.toISOString().slice(0, 10);
 }
 
-function mapProfile(address: PublicKey, authority: PublicKey, raw: RawProfile): ProfileView {
+function mapProfile(address: PublicKey, fallbackAuthority: PublicKey, raw: RawProfile): ProfileView {
+  const authority = raw.authority ?? fallbackAuthority;
   return {
     address: address.toBase58(),
     authority: authority.toBase58(),
@@ -249,6 +308,10 @@ function mapProfile(address: PublicKey, authority: PublicKey, raw: RawProfile): 
       raw.token_rewards_earned ?? raw.tokenRewardsEarned ?? 0
     ),
     nftRewardsEarned: raw.nft_rewards_earned ?? raw.nftRewardsEarned ?? 0,
+    commentsReceivedCount:
+      raw.comments_received_count ?? raw.commentsReceivedCount ?? 0,
+    followersCount: raw.followers_count ?? raw.followersCount ?? 0,
+    followingCount: raw.following_count ?? raw.followingCount ?? 0,
     lastTweetDay: formatDayCounter(
       toNumber(raw.last_tweet_day ?? raw.lastTweetDay ?? 0)
     ),
@@ -324,7 +387,7 @@ export function createAccountsCoder() {
 
 async function fetchDecodedAccount<T>(
   connection: Connection,
-  accountName: "profile" | "rewardConfig" | "like" | "stake",
+  accountName: "profile" | "rewardConfig" | "like" | "stake" | "comment" | "follow",
   address: PublicKey
 ) {
   const info = await connection.getAccountInfo(address);
@@ -339,7 +402,11 @@ async function fetchDecodedAccount<T>(
         ? "RewardConfig"
         : accountName === "like"
           ? "Like"
-          : "Stake";
+          : accountName === "comment"
+            ? "Comment"
+            : accountName === "follow"
+              ? "Follow"
+              : "Stake";
   return coder.decode(idlAccountName, info.data) as T;
 }
 
@@ -423,6 +490,8 @@ export async function loadAppState(
   });
 
   const likeRecords = await program.account.like.all();
+  const commentRecords = await program.account.comment.all();
+  const followRecords = await program.account.follow.all();
   const likeViews = likeRecords.map((entry) => {
     const raw = entry.account as unknown as RawLike;
     return {
@@ -438,6 +507,58 @@ export async function loadAppState(
   for (const like of likeViews) {
     if (!like.rewardClaimed && !claimableLikeByTweet.has(like.tweetAddress)) {
       claimableLikeByTweet.set(like.tweetAddress, like);
+    }
+  }
+
+  const commentViews = commentRecords
+    .map((entry) => {
+      const raw = entry.account as unknown as RawComment;
+      const author = raw.author.toBase58();
+      const authorProfileAddress = (
+        raw.author_profile_pda ?? raw.authorProfilePda
+      )!.toBase58();
+      const authorProfile = authorProfileMap.get(author);
+      return {
+        address: entry.publicKey.toBase58(),
+        author,
+        authorProfileAddress,
+        authorName: authorProfile?.name ?? author.slice(0, 6),
+        authorAvatarUri: authorProfile?.avatarUri ?? "",
+        tweetAddress: (raw.tweet_pda ?? raw.tweetPda)!.toBase58(),
+        content: raw.content,
+        createdAt: toNumber(raw.created_at ?? raw.createdAt ?? 0),
+        deleted: raw.deleted,
+      } satisfies CommentView;
+    })
+    .filter((comment) => !comment.deleted)
+    .sort((a, b) => a.createdAt - b.createdAt);
+
+  const commentsByTweet = new Map<string, CommentView[]>();
+  for (const comment of commentViews) {
+    const current = commentsByTweet.get(comment.tweetAddress) ?? [];
+    current.push(comment);
+    commentsByTweet.set(comment.tweetAddress, current);
+  }
+
+  const followViews = followRecords.map((entry) => {
+    const raw = entry.account as unknown as RawFollow;
+    return {
+      address: entry.publicKey.toBase58(),
+      followerProfileAddress: (
+        raw.follower_profile_pda ?? raw.followerProfilePda
+      )!.toBase58(),
+      followingProfileAddress: (
+        raw.following_profile_pda ?? raw.followingProfilePda
+      )!.toBase58(),
+      createdAt: toNumber(raw.created_at ?? raw.createdAt ?? 0),
+    } satisfies FollowView;
+  });
+  const viewerFollowByProfile = new Map<string, FollowView>();
+  if (viewerProfile) {
+    for (const follow of followViews) {
+      if (follow.followerProfileAddress === viewerProfile.address) {
+        viewerFollowByProfile.set(follow.followingProfileAddress, follow);
+      }
     }
   }
 
@@ -461,10 +582,13 @@ export async function loadAppState(
         likesCount: raw.likes_count ?? raw.likesCount ?? 0,
         rewardableLikesCount:
           raw.rewardable_likes_count ?? raw.rewardableLikesCount ?? 0,
+        commentsCount: raw.comments_count ?? raw.commentsCount ?? 0,
         createdAt: toNumber(raw.created_at ?? raw.createdAt ?? 0),
         deleted: raw.deleted,
+        comments: commentsByTweet.get(entry.publicKey.toBase58()) ?? [],
         viewerLike: viewerLikeAddress ? likeMap.get(viewerLikeAddress) ?? null : null,
         claimableAuthorLike: claimableLikeByTweet.get(entry.publicKey.toBase58()) ?? null,
+        viewerFollow: viewerFollowByProfile.get(authorProfileAddress) ?? null,
       } satisfies TweetView;
     })
     .filter((tweet) => !tweet.deleted)
@@ -522,6 +646,11 @@ export async function loadAppState(
       tokenBalance: viewerTokenBalance,
       stake: viewerStake,
       ownTweets,
+      following: viewerProfile
+        ? followViews.filter(
+            (follow) => follow.followerProfileAddress === viewerProfile.address
+          )
+        : [],
     },
   };
 }
@@ -748,6 +877,95 @@ export async function createLikeTx(provider: AnchorProvider, tweetAddress: strin
       tweet,
       profile: profileKey,
       like: likePda(tweet, profileKey),
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+}
+
+export async function createCommentTx(
+  provider: AnchorProvider,
+  tweet: TweetView,
+  content: string
+) {
+  const authority = assertWallet(provider);
+  const program = createProgram(provider);
+  const authorProfile = await requireProfile(provider.connection, authority);
+  const tweetKey = new PublicKey(tweet.address);
+  const authorProfileKey = new PublicKey(authorProfile.address);
+  const tweetProfileKey = new PublicKey(tweet.authorProfileAddress);
+  return program.methods
+    .createComment(content.trim())
+    .accountsStrict({
+      authority,
+      comment: commentPda(tweetKey, authority),
+      tweet: tweetKey,
+      authorProfile: authorProfileKey,
+      tweetProfile: tweetProfileKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+}
+
+export async function deleteCommentTx(
+  provider: AnchorProvider,
+  tweet: TweetView,
+  comment: CommentView
+) {
+  const authority = assertWallet(provider);
+  const program = createProgram(provider);
+  return program.methods
+    .deleteComment()
+    .accountsStrict({
+      authority,
+      comment: new PublicKey(comment.address),
+      tweet: new PublicKey(tweet.address),
+      tweetProfile: new PublicKey(tweet.authorProfileAddress),
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+}
+
+export async function createFollowTx(
+  provider: AnchorProvider,
+  targetProfileAddress: string,
+  targetAuthorityAddress: string
+) {
+  const authority = assertWallet(provider);
+  const program = createProgram(provider);
+  const followerProfile = await requireProfile(provider.connection, authority);
+  const followingProfile = new PublicKey(targetProfileAddress);
+  const following = new PublicKey(targetAuthorityAddress);
+  return program.methods
+    .createFollow()
+    .accountsStrict({
+      authority,
+      follow: followPda(authority, followingProfile),
+      followerProfile: new PublicKey(followerProfile.address),
+      following,
+      followingProfile,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+}
+
+export async function cancelFollowTx(
+  provider: AnchorProvider,
+  targetProfileAddress: string,
+  targetAuthorityAddress: string
+) {
+  const authority = assertWallet(provider);
+  const program = createProgram(provider);
+  const followerProfile = await requireProfile(provider.connection, authority);
+  const followingProfile = new PublicKey(targetProfileAddress);
+  const following = new PublicKey(targetAuthorityAddress);
+  return program.methods
+    .cancelFollow()
+    .accountsStrict({
+      authority,
+      follow: followPda(authority, followingProfile),
+      followerProfile: new PublicKey(followerProfile.address),
+      following,
+      followingProfile,
       systemProgram: SystemProgram.programId,
     })
     .rpc();

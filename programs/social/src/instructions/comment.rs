@@ -3,6 +3,7 @@ use crate::state::profile::Profile;
 use crate::state::tweet::Tweet;
 use anchor_lang::prelude::*;
 use crate::errors::SocialError;
+use crate::events::{CommentCreated, CommentDeleted};
 
 #[derive(Accounts)]
 pub struct CreateComment<'info> {
