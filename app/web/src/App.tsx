@@ -155,6 +155,8 @@ export default function App() {
     ...DEFAULT_REWARD_CONFIG_FORM,
   });
   const [socialListMode, setSocialListMode] = useState<SocialListMode>(null);
+  const [selectedSocialProfile, setSelectedSocialProfile] =
+    useState<SocialProfileLink | null>(null);
   const environment = appState?.environment ?? {
     rpcUrl: DEFAULT_RPC_URL,
     rewardConfigPda: "",
@@ -470,6 +472,95 @@ export default function App() {
       : socialListMode === "following"
         ? viewer?.followingProfiles ?? []
         : [];
+
+  const viewerFollowingMap = useMemo(
+    () =>
+      new Map((viewer?.following ?? []).map((follow) => [follow.followingProfileAddress, follow])),
+    [viewer?.following]
+  );
+
+  const selectedProfileFollow = selectedSocialProfile
+    ? viewerFollowingMap.get(selectedSocialProfile.profileAddress) ?? null
+    : null;
+
+  const selectedProfileTweets = useMemo(
+    () =>
+      selectedSocialProfile
+        ? (appState?.tweets.filter((tweet) => tweet.author === selectedSocialProfile.authority) ??
+            [])
+        : [],
+    [appState?.tweets, selectedSocialProfile]
+  );
+
+  function resolveSocialProfileLink(
+    authority: string,
+    profileAddress: string,
+    name: string,
+    avatarUri: string
+  ): SocialProfileLink {
+    const existing =
+      viewer?.followerProfiles.find((profile) => profile.profileAddress === profileAddress) ??
+      viewer?.followingProfiles.find((profile) => profile.profileAddress === profileAddress);
+
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      authority,
+      profileAddress,
+      name,
+      avatarUri,
+      bio: "",
+      tweetCount: appState?.tweets.filter((tweet) => tweet.author === authority).length ?? 0,
+      followersCount: 0,
+      followingCount: 0,
+      commentsReceivedCount: 0,
+    };
+  }
+
+  function openSocialProfile(entry: SocialProfileLink) {
+    setSelectedSocialProfile(entry);
+    setSocialListMode(null);
+  }
+
+  function closeSocialProfile() {
+    setSelectedSocialProfile(null);
+  }
+
+  function renderSocialFollowAction(entry: SocialProfileLink) {
+    if (!viewer?.profile || entry.authority === connectedAddress) {
+      return null;
+    }
+    const follow = viewerFollowingMap.get(entry.profileAddress) ?? null;
+    return (
+      <button
+        type="button"
+        className={`btn ${follow ? "ghost" : "secondary"}`}
+        disabled={!txReady || !!busyAction}
+        onClick={() =>
+          void runGuardedAction(
+            follow ? "Cancel Follow" : "Create Follow",
+            writeModeGuard(follow ? "取关" : "关注"),
+            async () =>
+              follow
+                ? cancelFollowTx(
+                    getWritableProvider(),
+                    entry.profileAddress,
+                    entry.authority
+                  )
+                : createFollowTx(
+                    getWritableProvider(),
+                    entry.profileAddress,
+                    entry.authority
+                  )
+          )
+        }
+      >
+        {follow ? "Unfollow" : "Follow"}
+      </button>
+    );
+  }
 
   return (
     <main className="app-shell">
@@ -920,13 +1011,26 @@ export default function App() {
                 return (
                   <article className="tweet-card" key={tweet.address}>
                     <div className="tweet-head">
-                      <div className="profile-card compact">
+                      <button
+                        type="button"
+                        className="profile-card compact profile-trigger"
+                        onClick={() =>
+                          openSocialProfile(
+                            resolveSocialProfileLink(
+                              tweet.author,
+                              tweet.authorProfileAddress,
+                              tweet.authorName,
+                              tweet.authorAvatarUri
+                            )
+                          )
+                        }
+                      >
                         <Avatar name={tweet.authorName} uri={tweet.authorAvatarUri} />
                         <div className="profile-copy">
                           <strong>{tweet.authorName}</strong>
                           <span className="muted">{shortAddress(tweet.author, 5, 5)}</span>
                         </div>
-                      </div>
+                      </button>
                       <div className="actions actions-inline">
                         {!isOwn ? (
                           <button
@@ -1088,7 +1192,20 @@ export default function App() {
                             const isOwnComment = comment.author === connectedAddress;
                             return (
                               <article className="comment-card" key={comment.address}>
-                                <div className="profile-card compact">
+                                <button
+                                  type="button"
+                                  className="profile-card compact profile-trigger"
+                                  onClick={() =>
+                                    openSocialProfile(
+                                      resolveSocialProfileLink(
+                                        comment.author,
+                                        comment.authorProfileAddress,
+                                        comment.authorName,
+                                        comment.authorAvatarUri
+                                      )
+                                    )
+                                  }
+                                >
                                   <Avatar
                                     name={comment.authorName}
                                     uri={comment.authorAvatarUri}
@@ -1099,7 +1216,7 @@ export default function App() {
                                       {formatTimestamp(comment.createdAt)}
                                     </span>
                                   </div>
-                                </div>
+                                </button>
                                 <p className="tweet-content">{comment.content}</p>
                                 {isOwnComment ? (
                                   <div className="actions">
@@ -1452,36 +1569,22 @@ export default function App() {
             <div className="overlay-list">
               {socialListEntries.length ? (
                 socialListEntries.map((entry) => (
-                  <article className="profile-card compact" key={entry.profileAddress}>
-                    <Avatar name={entry.name} uri={entry.avatarUri} />
-                    <div className="profile-copy">
-                      <strong>{entry.name}</strong>
-                      <span className="muted">{entry.bio || "No bio yet."}</span>
-                      <span className="code">{shortAddress(entry.authority, 6, 6)}</span>
-                    </div>
-                    {socialListMode === "following" ? (
-                      <div className="actions actions-inline">
-                        <button
-                          type="button"
-                          className="btn ghost"
-                          disabled={!txReady || !!busyAction}
-                          onClick={() =>
-                            void runGuardedAction(
-                              "Cancel Follow",
-                              writeModeGuard("取关"),
-                              async () =>
-                                cancelFollowTx(
-                                  getWritableProvider(),
-                                  entry.profileAddress,
-                                  entry.authority
-                                )
-                            )
-                          }
-                        >
-                          Unfollow
-                        </button>
+                  <article className="social-entry" key={entry.profileAddress}>
+                    <button
+                      type="button"
+                      className="profile-card compact profile-trigger"
+                      onClick={() => openSocialProfile(entry)}
+                    >
+                      <Avatar name={entry.name} uri={entry.avatarUri} />
+                      <div className="profile-copy">
+                        <strong>{entry.name}</strong>
+                        <span className="muted">{entry.bio || "No bio yet."}</span>
+                        <span className="code">{shortAddress(entry.authority, 6, 6)}</span>
                       </div>
-                    ) : null}
+                    </button>
+                    <div className="actions actions-inline">
+                      {renderSocialFollowAction(entry)}
+                    </div>
                   </article>
                 ))
               ) : (
@@ -1491,6 +1594,109 @@ export default function App() {
                     : "You are not following anyone yet."}
                 </div>
               )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {selectedSocialProfile ? (
+        <div className="overlay" onClick={closeSocialProfile}>
+          <section
+            className="overlay-panel"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="overlay-head">
+              <div>
+                <span className="eyebrow">Profile</span>
+                <h2>{selectedSocialProfile.name}</h2>
+              </div>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={closeSocialProfile}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="stack">
+              <div className="profile-card">
+                <Avatar
+                  name={selectedSocialProfile.name}
+                  uri={selectedSocialProfile.avatarUri}
+                />
+                <div className="profile-copy">
+                  <strong>{selectedSocialProfile.name}</strong>
+                  <span className="muted">
+                    {selectedSocialProfile.bio || "No bio yet."}
+                  </span>
+                  <span className="code">
+                    {shortAddress(selectedSocialProfile.authority, 6, 6)}
+                  </span>
+                </div>
+                <div className="actions actions-inline">
+                  {renderSocialFollowAction(selectedSocialProfile)}
+                </div>
+              </div>
+
+              <div className="stats-row">
+                <div className="stat-box">
+                  <span>Tweets</span>
+                  <strong>{selectedSocialProfile.tweetCount}</strong>
+                </div>
+                <div className="stat-box">
+                  <span>Followers</span>
+                  <strong>{selectedSocialProfile.followersCount}</strong>
+                </div>
+                <div className="stat-box">
+                  <span>Following</span>
+                  <strong>{selectedSocialProfile.followingCount}</strong>
+                </div>
+                <div className="stat-box">
+                  <span>Comments Received</span>
+                  <strong>{selectedSocialProfile.commentsReceivedCount}</strong>
+                </div>
+              </div>
+
+              {selectedProfileFollow ? (
+                <div className="banner">You are already following this builder.</div>
+              ) : null}
+
+              <section className="card">
+                <div>
+                  <h2>Recent Tweets</h2>
+                  <p className="muted">
+                    Latest visible tweets from this profile on the current cluster.
+                  </p>
+                </div>
+                <div className="tweet-list compact-list">
+                  {selectedProfileTweets.length ? (
+                    selectedProfileTweets.slice(0, 5).map((tweet) => (
+                      <article className="tweet-card" key={tweet.address}>
+                        <p className="tweet-content">{tweet.content}</p>
+                        <div className="stats-row">
+                          <div className="stat-box">
+                            <span>Likes</span>
+                            <strong>{tweet.likesCount}</strong>
+                          </div>
+                          <div className="stat-box">
+                            <span>Comments</span>
+                            <strong>{tweet.commentsCount}</strong>
+                          </div>
+                          <div className="stat-box">
+                            <span>Created</span>
+                            <strong>{formatTimestamp(tweet.createdAt)}</strong>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="empty-state compact">
+                      No visible tweets from this profile yet.
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
           </section>
         </div>

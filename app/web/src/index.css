@@ -192,6 +192,12 @@ button {
   gap: 14px;
 }
 
+.social-entry {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .brand-lockup strong {
   font-family: var(--display);
   font-size: 20px;
@@ -729,6 +735,10 @@ button {
   max-height: 1120px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.tweet-list.compact-list {
+  max-height: 520px;
 }
 
 .tweet-card {

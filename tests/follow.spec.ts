@@ -45,6 +45,8 @@ describe("follow", () => {
       .rpc();
 
     const followAccount = await program.account.follow.fetch(follow);
+    expect(followAccount.follower.toBase58()).to.equal(follower.publicKey.toBase58());
+    expect(followAccount.following.toBase58()).to.equal(following.publicKey.toBase58());
     expect(followAccount.followerProfilePda.toBase58()).to.equal(
       followerProfile.toBase58()
     );
@@ -169,6 +171,56 @@ describe("follow", () => {
       expect.fail("expected duplicate follow to fail");
     } catch (err) {
       expect(err).to.exist;
+    }
+  });
+
+  it("blocks canceling another user's follow", async () => {
+    const follower = Keypair.generate();
+    const following = Keypair.generate();
+    const attacker = Keypair.generate();
+    await airdrop(follower.publicKey);
+    await airdrop(following.publicKey);
+    await airdrop(attacker.publicKey);
+
+    const followerProfile = await createProfile(follower, "follower");
+    const followingProfile = await createProfile(following, "following");
+    await createProfile(attacker, "attacker");
+    const follow = followPda(follower.publicKey, followingProfile);
+
+    await program.methods
+      .createFollow()
+      .accountsStrict({
+        authority: follower.publicKey,
+        follow,
+        followerProfile,
+        following: following.publicKey,
+        followingProfile,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([follower])
+      .rpc();
+
+    try {
+      await program.methods
+        .cancelFollow()
+        .accountsStrict({
+          authority: attacker.publicKey,
+          follow,
+          followerProfile: profilePda(attacker.publicKey),
+          following: following.publicKey,
+          followingProfile,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([attacker])
+        .rpc();
+      expect.fail("expected non follower cancel to fail");
+    } catch (err) {
+      expect(`${err}`).to.satisfy(
+        (message: string) =>
+          message.includes("Invalid follow") ||
+          message.includes("ConstraintSeeds") ||
+          message.includes("constraint")
+      );
     }
   });
 });

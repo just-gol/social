@@ -175,20 +175,19 @@ async function main() {
   const rewardTx = await program.methods
     .mintLikeReward()
     .accountsStrict({
-      authority: liker.publicKey,
+      authority: wallet.publicKey,
       tweet,
-      profile: likerProfile,
-      like,
       authorProfile: profile,
+      like,
+      likerProfile,
       rewardConfig,
       tokenMintAccount: tokenMint,
-      authorTokenAccount,
-      author: wallet.publicKey,
+      authorityTokenAccount: authorTokenAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
-    .signers([liker])
+    .signers([wallet])
     .rpc();
 
   console.log("mint_like_reward_tx", rewardTx);

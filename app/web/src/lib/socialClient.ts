@@ -211,6 +211,10 @@ export type SocialProfileLink = {
   name: string;
   avatarUri: string;
   bio: string;
+  tweetCount: number;
+  followersCount: number;
+  followingCount: number;
+  commentsReceivedCount: number;
 };
 
 export type LikeView = {
@@ -682,6 +686,10 @@ export async function loadAppState(
                   name: profile.name,
                   avatarUri: profile.avatarUri,
                   bio: profile.bio,
+                  tweetCount: profile.tweetCount,
+                  followersCount: profile.followersCount,
+                  followingCount: profile.followingCount,
+                  commentsReceivedCount: profile.commentsReceivedCount,
                 }
               : {
                   authority: follow.follower,
@@ -689,6 +697,10 @@ export async function loadAppState(
                   name: follow.follower.slice(0, 6),
                   avatarUri: "",
                   bio: "",
+                  tweetCount: 0,
+                  followersCount: 0,
+                  followingCount: 0,
+                  commentsReceivedCount: 0,
                 };
           })
       : [];
@@ -706,6 +718,10 @@ export async function loadAppState(
                   name: profile.name,
                   avatarUri: profile.avatarUri,
                   bio: profile.bio,
+                  tweetCount: profile.tweetCount,
+                  followersCount: profile.followersCount,
+                  followingCount: profile.followingCount,
+                  commentsReceivedCount: profile.commentsReceivedCount,
                 }
               : {
                   authority: follow.following,
@@ -713,6 +729,10 @@ export async function loadAppState(
                   name: follow.following.slice(0, 6),
                   avatarUri: "",
                   bio: "",
+                  tweetCount: 0,
+                  followersCount: 0,
+                  followingCount: 0,
+                  commentsReceivedCount: 0,
                 };
           })
       : [];

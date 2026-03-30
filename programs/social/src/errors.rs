@@ -52,4 +52,6 @@ pub enum SocialError {
     CommentsUnderflow,
     #[msg("Invalid follow")]
     InvalidFollow,
+    #[msg("Cannot comment on own tweet")]
+    CannotCommentOnOwnTweet,
 }

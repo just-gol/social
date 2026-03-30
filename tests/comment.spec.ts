@@ -357,4 +357,184 @@ describe("comment", () => {
       expect(`${error}`).to.include("Not author");
     }
   });
+
+  it("blocks duplicate comment creation for the same author and tweet", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
+
+    const author = Keypair.generate();
+    const commenter = Keypair.generate();
+    await airdrop(author.publicKey);
+    await airdrop(commenter.publicKey);
+
+    const authorProfile = await createProfile(author, "author");
+    const commenterProfile = await createProfile(commenter, "commenter");
+    const rewardConfig = await initRewardConfig(author);
+    const { mint } = await createNftMintFor(author, authorProfile, rewardConfig);
+    const tweet = await createTweetFor(author, authorProfile, rewardConfig, mint, "tweet");
+    const comment = commentPda(tweet, commenter.publicKey);
+
+    await program.methods
+      .createComment("first comment")
+      .accountsStrict({
+        authority: commenter.publicKey,
+        comment,
+        tweet,
+        authorProfile: commenterProfile,
+        tweetProfile: authorProfile,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([commenter])
+      .rpc();
+
+    try {
+      await program.methods
+        .createComment("second comment")
+        .accountsStrict({
+          authority: commenter.publicKey,
+          comment,
+          tweet,
+          authorProfile: commenterProfile,
+          tweetProfile: authorProfile,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([commenter])
+        .rpc();
+      expect.fail("duplicate comment should fail");
+    } catch (error) {
+      expect(`${error}`).to.include("already in use");
+    }
+  });
+
+  it("allows comment author to delete after parent tweet is deleted", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
+
+    const author = Keypair.generate();
+    const commenter = Keypair.generate();
+    await airdrop(author.publicKey);
+    await airdrop(commenter.publicKey);
+
+    const authorProfile = await createProfile(author, "author");
+    const commenterProfile = await createProfile(commenter, "commenter");
+    const rewardConfig = await initRewardConfig(author);
+    const { mint } = await createNftMintFor(author, authorProfile, rewardConfig);
+    const tweet = await createTweetFor(author, authorProfile, rewardConfig, mint, "tweet");
+    const comment = commentPda(tweet, commenter.publicKey);
+
+    await program.methods
+      .createComment("still removable")
+      .accountsStrict({
+        authority: commenter.publicKey,
+        comment,
+        tweet,
+        authorProfile: commenterProfile,
+        tweetProfile: authorProfile,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([commenter])
+      .rpc();
+
+    await program.methods
+      .deleteTweet()
+      .accountsStrict({
+        authority: author.publicKey,
+        tweet,
+        profile: authorProfile,
+      })
+      .signers([author])
+      .rpc();
+
+    await program.methods
+      .deleteComment()
+      .accountsStrict({
+        authority: commenter.publicKey,
+        comment,
+        tweet,
+        tweetProfile: authorProfile,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([commenter])
+      .rpc();
+
+    const commentAccount = await program.account.comment.fetch(comment);
+    expect(commentAccount.deleted).to.equal(true);
+
+    const tweetAccount = await program.account.tweet.fetch(tweet);
+    expect(tweetAccount.commentsCount).to.equal(0);
+
+    const updatedAuthorProfile = await program.account.profile.fetch(authorProfile);
+    expect(updatedAuthorProfile.commentsReceivedCount).to.equal(0);
+  });
+
+  it("blocks deleting a comment twice", async function () {
+    const metadataProgramInfo = await program.provider.connection.getAccountInfo(
+      TOKEN_METADATA_PROGRAM_ID
+    );
+    if (!metadataProgramInfo || !metadataProgramInfo.executable) {
+      this.skip();
+    }
+
+    const author = Keypair.generate();
+    const commenter = Keypair.generate();
+    await airdrop(author.publicKey);
+    await airdrop(commenter.publicKey);
+
+    const authorProfile = await createProfile(author, "author");
+    const commenterProfile = await createProfile(commenter, "commenter");
+    const rewardConfig = await initRewardConfig(author);
+    const { mint } = await createNftMintFor(author, authorProfile, rewardConfig);
+    const tweet = await createTweetFor(author, authorProfile, rewardConfig, mint, "tweet");
+    const comment = commentPda(tweet, commenter.publicKey);
+
+    await program.methods
+      .createComment("double delete")
+      .accountsStrict({
+        authority: commenter.publicKey,
+        comment,
+        tweet,
+        authorProfile: commenterProfile,
+        tweetProfile: authorProfile,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([commenter])
+      .rpc();
+
+    await program.methods
+      .deleteComment()
+      .accountsStrict({
+        authority: commenter.publicKey,
+        comment,
+        tweet,
+        tweetProfile: authorProfile,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([commenter])
+      .rpc();
+
+    try {
+      await program.methods
+        .deleteComment()
+        .accountsStrict({
+          authority: commenter.publicKey,
+          comment,
+          tweet,
+          tweetProfile: authorProfile,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([commenter])
+        .rpc();
+      expect.fail("deleting comment twice should fail");
+    } catch (error) {
+      expect(`${error}`).to.include("Comment is already deleted");
+    }
+  });
 });
