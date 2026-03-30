@@ -269,6 +269,7 @@ export type ViewerState = {
   tokenBalance: string;
   stake: StakeView | null;
   ownTweets: TweetView[];
+  followers: FollowView[];
   following: FollowView[];
   followerProfiles: SocialProfileLink[];
   followingProfiles: SocialProfileLink[];
@@ -755,6 +756,11 @@ export async function loadAppState(
       tokenBalance: viewerTokenBalance,
       stake: viewerStake,
       ownTweets,
+      followers: viewerProfile
+        ? followViews.filter(
+            (follow) => follow.followingProfileAddress === viewerProfile.address
+          )
+        : [],
       following: viewerProfile
         ? followViews.filter(
             (follow) => follow.followerProfileAddress === viewerProfile.address

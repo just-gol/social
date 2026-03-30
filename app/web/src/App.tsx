@@ -126,8 +126,24 @@ function commentGuard(
   return null;
 }
 
-type AppTab = "home" | "base" | "profile" | "tweets" | "vault" | "admin";
+type AppTab =
+  | "home"
+  | "base"
+  | "profile"
+  | "tweets"
+  | "notifications"
+  | "vault"
+  | "admin";
 type SocialListMode = "followers" | "following" | null;
+type TweetFeedMode = "latest" | "following" | "mine";
+type NotificationItem = {
+  id: string;
+  kind: "follow" | "comment" | "reward";
+  title: string;
+  body: string;
+  at: number;
+  actor: SocialProfileLink | null;
+};
 const LOCAL_KEYPAIR_SECRET_STORAGE_KEY = "social-local-keypair-secret";
 const WALLET_MODE_STORAGE_KEY = "social-wallet-mode";
 
@@ -155,6 +171,7 @@ export default function App() {
     ...DEFAULT_REWARD_CONFIG_FORM,
   });
   const [socialListMode, setSocialListMode] = useState<SocialListMode>(null);
+  const [tweetFeedMode, setTweetFeedMode] = useState<TweetFeedMode>("latest");
   const [selectedSocialProfile, setSelectedSocialProfile] =
     useState<SocialProfileLink | null>(null);
   const environment = appState?.environment ?? {
@@ -479,6 +496,11 @@ export default function App() {
     [viewer?.following]
   );
 
+  const viewerFollowingProfilesSet = useMemo(
+    () => new Set((viewer?.followingProfiles ?? []).map((profile) => profile.profileAddress)),
+    [viewer?.followingProfiles]
+  );
+
   const selectedProfileFollow = selectedSocialProfile
     ? viewerFollowingMap.get(selectedSocialProfile.profileAddress) ?? null
     : null;
@@ -491,6 +513,19 @@ export default function App() {
         : [],
     [appState?.tweets, selectedSocialProfile]
   );
+
+  const filteredTweets = useMemo(() => {
+    const allTweets = appState?.tweets ?? [];
+    if (tweetFeedMode === "mine") {
+      return allTweets.filter((tweet) => tweet.author === connectedAddress);
+    }
+    if (tweetFeedMode === "following") {
+      return allTweets.filter((tweet) =>
+        viewerFollowingProfilesSet.has(tweet.authorProfileAddress)
+      );
+    }
+    return allTweets;
+  }, [appState?.tweets, connectedAddress, tweetFeedMode, viewerFollowingProfilesSet]);
 
   function resolveSocialProfileLink(
     authority: string,
@@ -518,6 +553,71 @@ export default function App() {
       commentsReceivedCount: 0,
     };
   }
+
+  const notifications = useMemo<NotificationItem[]>(() => {
+    if (!viewer?.profile) {
+      return [];
+    }
+
+    const ownTweetAddresses = new Set(
+      (appState?.tweets ?? [])
+        .filter((tweet) => tweet.author === viewer.profile?.authority)
+        .map((tweet) => tweet.address)
+    );
+
+    const followerMap = new Map(
+      (viewer.followerProfiles ?? []).map((profile) => [profile.profileAddress, profile])
+    );
+
+    const followNotifications = (viewer.followers ?? []).map((follow) => ({
+      id: `follow-${follow.address}`,
+      kind: "follow" as const,
+      title: "New follower",
+      body: `${followerMap.get(follow.followerProfileAddress)?.name ?? "A builder"} followed you.`,
+      at: follow.createdAt,
+      actor: followerMap.get(follow.followerProfileAddress) ?? null,
+    }));
+
+    const commentNotifications = (appState?.tweets ?? [])
+      .filter((tweet) => ownTweetAddresses.has(tweet.address))
+      .flatMap((tweet) =>
+        tweet.comments
+          .filter((comment) => comment.author !== connectedAddress)
+          .map((comment) => ({
+            id: `comment-${comment.address}`,
+            kind: "comment" as const,
+            title: "New comment",
+            body: `${comment.authorName} commented on your tweet: ${comment.content}`,
+            at: comment.createdAt,
+            actor: resolveSocialProfileLink(
+              comment.author,
+              comment.authorProfileAddress,
+              comment.authorName,
+              comment.authorAvatarUri
+            ),
+          }))
+      );
+
+    const rewardNotifications = (appState?.tweets ?? [])
+      .filter((tweet) => tweet.author === viewer.profile?.authority && !!tweet.claimableAuthorLike)
+      .map((tweet) => ({
+        id: `reward-${tweet.address}`,
+        kind: "reward" as const,
+        title: "Reward ready",
+        body: "A like reward is ready for you to settle on one of your tweets.",
+        at: tweet.claimableAuthorLike?.createdAt ?? tweet.createdAt,
+        actor: resolveSocialProfileLink(
+          tweet.author,
+          tweet.authorProfileAddress,
+          tweet.authorName,
+          tweet.authorAvatarUri
+        ),
+      }));
+
+    return [...followNotifications, ...commentNotifications, ...rewardNotifications].sort(
+      (a, b) => b.at - a.at
+    );
+  }, [appState?.tweets, connectedAddress, viewer, resolveSocialProfileLink]);
 
   function openSocialProfile(entry: SocialProfileLink) {
     setSelectedSocialProfile(entry);
@@ -577,6 +677,7 @@ export default function App() {
           <button className={`topnav-tab ${activeTab === "base" ? "active" : ""}`} onClick={() => setActiveTab("base")}>Base Camp</button>
           <button className={`topnav-tab ${activeTab === "profile" ? "active" : ""}`} onClick={() => setActiveTab("profile")}>Profile</button>
           <button className={`topnav-tab ${activeTab === "tweets" ? "active" : ""}`} onClick={() => setActiveTab("tweets")}>Tweets</button>
+          <button className={`topnav-tab ${activeTab === "notifications" ? "active" : ""}`} onClick={() => setActiveTab("notifications")}>Notifications</button>
           <button className={`topnav-tab ${activeTab === "vault" ? "active" : ""}`} onClick={() => setActiveTab("vault")}>Vault</button>
           <button className={`topnav-tab ${activeTab === "admin" ? "active" : ""}`} onClick={() => setActiveTab("admin")}>Admin</button>
         </nav>
@@ -986,9 +1087,32 @@ export default function App() {
               All tweets are loaded directly from the program accounts. Like buttons and reward actions react to your current wallet and profile state.
             </p>
           </div>
+          <div className="pill-row">
+            <button
+              type="button"
+              className={`page-tab ${tweetFeedMode === "latest" ? "active" : ""}`}
+              onClick={() => setTweetFeedMode("latest")}
+            >
+              Latest
+            </button>
+            <button
+              type="button"
+              className={`page-tab ${tweetFeedMode === "following" ? "active" : ""}`}
+              onClick={() => setTweetFeedMode("following")}
+            >
+              Following
+            </button>
+            <button
+              type="button"
+              className={`page-tab ${tweetFeedMode === "mine" ? "active" : ""}`}
+              onClick={() => setTweetFeedMode("mine")}
+            >
+              Mine
+            </button>
+          </div>
           <div className="tweet-list">
-            {appState?.tweets.length ? (
-              appState.tweets.map((tweet) => {
+            {filteredTweets.length ? (
+              filteredTweets.map((tweet) => {
                 const isOwn = tweet.author === connectedAddress;
                 const canLike = !!viewer?.profile && !isOwn && !tweet.deleted && !tweet.viewerLike;
                 const canFollow = !!viewer?.profile && !isOwn && !tweet.viewerFollow;
@@ -1293,8 +1417,121 @@ export default function App() {
                 );
               })
             ) : (
-              <div className="empty-state">No tweets on this world yet.</div>
+              <div className="empty-state">
+                {tweetFeedMode === "following"
+                  ? "No tweets yet from the people you follow."
+                  : tweetFeedMode === "mine"
+                    ? "You have not posted any visible tweets yet."
+                    : "No tweets on this world yet."}
+              </div>
             )}
+          </div>
+        </section>
+      </section>
+        </>
+      ) : null}
+
+      {activeTab === "notifications" ? (
+        <>
+      <section className="section-heading" id="notifications">
+        <span className="eyebrow">Signal Board</span>
+        <h2>Watch follows, comments, and rewards.</h2>
+      </section>
+
+      <section className="grid two-up">
+        <section className="card">
+          <div>
+            <h2>Activity Inbox</h2>
+            <p className="muted">
+              Follows, comments on your tweets, and reward-ready updates are grouped here from the current cluster state.
+            </p>
+          </div>
+          <div className="overlay-list">
+            {notifications.length ? (
+              notifications.map((item) => (
+                <article className="notification-card" key={item.id}>
+                  <div className="actions actions-inline">
+                    <span className={`tag ${item.kind === "reward" ? "" : "info"}`}>
+                      {item.kind === "follow"
+                        ? "Follow"
+                        : item.kind === "comment"
+                          ? "Comment"
+                          : "Reward"}
+                    </span>
+                    <span className="muted">{formatTimestamp(item.at)}</span>
+                  </div>
+                  <strong>{item.title}</strong>
+                  <p className="tweet-content">{item.body}</p>
+                  {item.actor ? (
+                    <button
+                      type="button"
+                      className="profile-card compact profile-trigger"
+                      onClick={() => openSocialProfile(item.actor!)}
+                    >
+                      <Avatar name={item.actor.name} uri={item.actor.avatarUri} />
+                      <div className="profile-copy">
+                        <strong>{item.actor.name}</strong>
+                        <span className="muted">{item.actor.bio || "No bio yet."}</span>
+                      </div>
+                    </button>
+                  ) : null}
+                </article>
+              ))
+            ) : (
+              <div className="empty-state">
+                No notifications yet. Social activity will appear here as soon as people follow you or comment on your tweets.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="card">
+          <div>
+            <h2>Quick Social Stats</h2>
+            <p className="muted">
+              A compact summary of your current social footprint on this cluster.
+            </p>
+          </div>
+          <div className="stats-row">
+            <div className="stat-box">
+              <span>Followers</span>
+              <strong>{viewer?.profile?.followersCount ?? 0}</strong>
+            </div>
+            <div className="stat-box">
+              <span>Following</span>
+              <strong>{viewer?.profile?.followingCount ?? 0}</strong>
+            </div>
+            <div className="stat-box">
+              <span>Comments Received</span>
+              <strong>{viewer?.profile?.commentsReceivedCount ?? 0}</strong>
+            </div>
+            <div className="stat-box">
+              <span>Pending Rewards</span>
+              <strong>
+                {
+                  (appState?.tweets ?? []).filter(
+                    (tweet) => tweet.author === connectedAddress && tweet.claimableAuthorLike
+                  ).length
+                }
+              </strong>
+            </div>
+          </div>
+          <div className="feature-list">
+            <div className="feature-item">
+              <span className="feature-kicker">N1</span>
+              <strong>Follow alerts</strong>
+              <span className="muted">Know exactly who joined your graph.</span>
+            </div>
+            <div className="feature-item">
+              <span className="feature-kicker">N2</span>
+              <strong>Comment alerts</strong>
+              <span className="muted">Jump from replies back into user details.</span>
+            </div>
+            <div className="feature-item">
+              <span className="feature-kicker">N3</span>
+              <strong>Reward reminders</strong>
+              <span className="muted">Surface rewardable tweets before they get lost in the feed.</span>
+            </div>
           </div>
         </section>
       </section>
