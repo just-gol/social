@@ -77,6 +77,7 @@ pub struct DeleteComment<'info> {
 pub fn create_comment(ctx: Context<CreateComment>, content: String) -> Result<()> {
     require!(content.len() <= 64, SocialError::ContentTooLong);
     require!(!ctx.accounts.tweet.deleted,SocialError::TweetAlreadyDeleted);
+    require!(ctx.accounts.tweet.author != ctx.accounts.authority.key(), SocialError::CannotCommentOnOwnTweet);
     ctx.accounts.comment.set_inner(Comment::new(
         ctx.accounts.authority.key(),
         content,
